@@ -6,9 +6,12 @@
 
 using namespace lemlib;
 
+// --- Controller Settings (Definitions) ---
+lemlib::ControllerSettings lateralSettings(7.0, 0.1, 8.0, 3.0, 1.0, 100.0, 3.0, 500.0, 0.0);
+lemlib::ControllerSettings angularSettings(2.5, 0.0, 17.0, 3.0, 1.0, 100.0, 3.0, 500.0, 0.0);
+
 // --- Motor Definitions ---
 pros::Controller master(pros::E_CONTROLLER_MASTER);
-// Assuming these are additional mechanism motors, not drivetrain
 pros::Motor something1(1); 
 pros::Motor something2(1);
 pros::Motor something3(1);

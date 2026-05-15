@@ -16,8 +16,9 @@ extern pros::Controller master;
 extern pros::MotorGroup driveLeftMotors;
 extern pros::MotorGroup driveRightMotors;
 
-extern lemlib::ControllerSettings lateralSettings(7.0, 0.1, 8.0, 3.0, 1.0, 100.0, 3.0, 500.0, 0.0);
-extern lemlib::ControllerSettings angularSettings(2.5, 0.0, 17.0, 3.0, 1.0, 100.0, 3.0, 500.0, 0.0);
+// --- Controller Settings (Declarations only) ---
+extern lemlib::ControllerSettings lateralSettings;
+extern lemlib::ControllerSettings angularSettings;
 
 // --- Sensors ---
 extern pros::Imu imu;
