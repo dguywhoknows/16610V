@@ -103,3 +103,5 @@ uint32_t lv_os_get_idle_percent(void);
 #endif
 
 #endif /*LV_FREERTOS_H*/
+
+

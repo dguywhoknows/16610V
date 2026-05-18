@@ -186,3 +186,5 @@ void lv_vg_lite_finish(struct _lv_draw_vg_lite_unit_t * u);
 #endif
 
 #endif /*VG_LITE_UTILS_H*/
+
+

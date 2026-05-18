@@ -379,3 +379,5 @@ typedef struct _lv_sysmon_perf_info_t lv_sysmon_perf_info_t;
 #endif
 
 #endif /*LV_TYPES_H*/
+
+

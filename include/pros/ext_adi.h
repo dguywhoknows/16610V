@@ -1328,3 +1328,5 @@ int32_t ext_adi_led_clear_pixel(ext_adi_led_t led, uint32_t* buffer, uint32_t bu
 #endif
 
 #endif  // _PROS_ADI_H_
+
+

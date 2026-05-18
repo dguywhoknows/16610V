@@ -182,3 +182,5 @@ static bool neonRasterTranslucentRect(SwSurface* surface, const SwBBox& region, 
 
 #endif /* LV_USE_THORVG_INTERNAL */
 
+
+

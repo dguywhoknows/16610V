@@ -120,3 +120,4 @@ void lv_draw_nema_gfx_arc(lv_draw_unit_t * draw_unit, const lv_draw_arc_dsc_t * 
 #endif
 
 #endif /*LV_DRAW_NEMA_GFX_H*/
+

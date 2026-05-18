@@ -66,3 +66,5 @@ void lv_calendar_gregorian_to_chinese(lv_calendar_date_t * gregorian_time, lv_ca
 #endif
 
 #endif /*LV_CALENDAR_CHINESE_H*/
+
+

@@ -64,3 +64,5 @@ struct _lv_bar_t {
 #endif
 
 #endif /*LV_BAR_PRIVATE_H*/
+
+

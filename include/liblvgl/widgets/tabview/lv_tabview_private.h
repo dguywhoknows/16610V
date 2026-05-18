@@ -53,3 +53,5 @@ struct _lv_tabview_t {
 #endif
 
 #endif /*LV_TABVIEW_PRIVATE_H*/
+
+

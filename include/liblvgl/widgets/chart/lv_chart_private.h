@@ -83,3 +83,5 @@ struct _lv_chart_t {
 #endif
 
 #endif /*LV_CHART_PRIVATE_H*/
+
+

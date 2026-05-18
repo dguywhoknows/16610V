@@ -354,3 +354,5 @@ static inline uint8_t MULTIPLY(uint8_t c, uint8_t a)
 
 #endif /* LV_USE_THORVG_INTERNAL */
 
+
+

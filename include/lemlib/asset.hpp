@@ -26,3 +26,4 @@ typedef struct __attribute__((__packed__)) _asset {
     }
 
 #endif // _ASSET_H_
+

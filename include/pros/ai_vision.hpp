@@ -598,3 +598,5 @@ class AIVision : public Device {
 }  // namespace v5
 }  // namespace pros
 #endif  // _PROS_VISION_HPP_
+
+

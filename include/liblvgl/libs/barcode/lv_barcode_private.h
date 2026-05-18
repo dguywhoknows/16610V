@@ -53,3 +53,5 @@ struct _lv_barcode_t {
 #endif
 
 #endif /*LV_BARCODE_PRIVATE_H*/
+
+

@@ -49,3 +49,5 @@ struct _lv_draw_mask_rect_dsc_t {
 #endif
 
 #endif /*LV_DRAW_MASK_PRIVATE_H*/
+
+

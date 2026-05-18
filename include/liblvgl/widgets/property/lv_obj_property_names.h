@@ -20,3 +20,5 @@
     extern const lv_property_name_t lv_textarea_property_names[15];
 #endif
 #endif
+
+

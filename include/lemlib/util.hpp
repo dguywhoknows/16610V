@@ -164,3 +164,4 @@ float ema(float current, float previous, float smooth);
  */
 float getCurvature(Pose pose, Pose other);
 } // namespace lemlib
+

@@ -480,3 +480,5 @@ BlendMethod Paint::blend() const noexcept
 
 #endif /* LV_USE_THORVG_INTERNAL */
 
+
+

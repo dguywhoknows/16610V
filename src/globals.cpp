@@ -1,8 +1,11 @@
-#include "globals.hpp"
 #include "lemlib/chassis/chassis.hpp"
 #include "pros/motors.hpp"
 #include <vector>
 #include <string>
+#include "pros/adi.hpp"
+#include "pros/imu.hpp"
+#include "pros/distance.hpp"
+#include "pros/optical.hpp"
 
 using namespace lemlib;
 
@@ -21,27 +24,32 @@ pros::Motor something4(1);
 pros::Imu imu(1);
 pros::Rotation verticalRotation(1);
 pros::Rotation horizontalRotation(1);
+pros::Rotation liftSensor(1);
 pros::Distance distanceSensor1(1);
 pros::Distance distanceSensor2(1);
 pros::Distance distanceSensor3(1);
+pros::Distance distanceSensor4(1);
+pros::Distance distanceSensor5(1);
 pros::Optical opticalSensor1(1);
+pros::Optical opticalSensor2(1);
 
 // --- Pneumatic Definitions ---
 pros::adi::DigitalOut something5('A');
 pros::adi::DigitalOut something6('A');
 pros::adi::DigitalOut something7('A');
 
-constexpr int leftPort1 = 1; constexpr int leftPort2 = 1; constexpr int leftPort3 = 1;
-constexpr int rightPort1 = 1; constexpr int rightPort2 = 1; constexpr int rightPort3 = 1;
+pros::Motor leftMotor1(1); pros::Motor leftMotor2(1); pros::Motor leftMotor3(1);
+pros::Motor rightMotor1(1); pros::Motor rightMotor2(1); pros::Motor rightMotor3(1);
 
-pros::MotorGroup driveLeftMotors({leftPort1, leftPort2, leftPort3});
-pros::MotorGroup driveRightMotors({rightPort1, rightPort2, rightPort3});
+pros::MotorGroup driveLeftMotors({1, 1, 1});
+pros::MotorGroup driveRightMotors({1, 1, 1});
+pros::MotorGroup fullDrive({1, 1, 1, 1, 1, 1});
 
 constexpr double driveWheelDiameter = 1.0;
 constexpr double odomWheelDiameter = 1.0;
 constexpr double trackingWidth = 1.0;
 
-int currentPage = 0; // 0 = Home, 1 = Auton
+int currentPage = 0; // 0 = Home, 1 = Auton, 4 = Sensors
 std::string allianceColor = "RED";
 bool controllerEnabled = true;
 int currentStartingPos = 4;
@@ -77,3 +85,4 @@ void initializeGlobals() {
     imu.tare_rotation();
     verticalRotation.reset();
 }
+

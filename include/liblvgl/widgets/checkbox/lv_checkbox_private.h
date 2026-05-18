@@ -53,3 +53,5 @@ struct _lv_checkbox_t {
 #endif
 
 #endif /*LV_CHECKBOX_PRIVATE_H*/
+
+

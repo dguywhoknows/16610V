@@ -71,3 +71,5 @@ struct _lv_draw_vg_lite_unit_t {
 #endif
 
 #endif /*LV_DRAW_VG_LITE_TYPE_H*/
+
+

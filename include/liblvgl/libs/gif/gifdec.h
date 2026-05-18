@@ -69,3 +69,5 @@ void gd_close_gif(gd_GIF * gif);
 #endif
 
 #endif /* GIFDEC_H */
+
+

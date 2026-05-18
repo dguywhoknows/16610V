@@ -55,3 +55,5 @@ struct _lv_observer_t {
 #endif
 
 #endif /*LV_OBSERVER_PRIVATE_H*/
+
+

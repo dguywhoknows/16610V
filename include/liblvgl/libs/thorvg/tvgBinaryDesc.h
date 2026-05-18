@@ -104,3 +104,5 @@ using TvgBinFlag = TvgBinByte;
 
 #endif /* LV_USE_THORVG_INTERNAL */
 
+
+

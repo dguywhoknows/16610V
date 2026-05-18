@@ -57,3 +57,5 @@ bool lv_freetype_info_is_equal(const lv_freetype_info_t * ft_info_1, const lv_fr
 #endif
 
 #endif /* LV_FONT_MANAGER_UTILS_H */
+
+

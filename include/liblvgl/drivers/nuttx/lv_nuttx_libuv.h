@@ -64,3 +64,5 @@ void lv_nuttx_uv_deinit(void ** data);
 #endif
 
 #endif /*LV_NUTTX_LIBUV_H*/
+
+

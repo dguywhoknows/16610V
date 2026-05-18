@@ -788,3 +788,5 @@ typedef void * lv_obj_user_data_t;
 #endif /*LV_CONF_H*/
 
 #endif /*End of "Content enable"*/
+
+

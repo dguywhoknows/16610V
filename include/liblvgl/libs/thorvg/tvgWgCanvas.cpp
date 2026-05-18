@@ -87,3 +87,5 @@ unique_ptr<WgCanvas> WgCanvas::gen() noexcept
 
 #endif /* LV_USE_THORVG_INTERNAL */
 
+
+

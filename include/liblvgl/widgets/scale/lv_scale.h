@@ -256,3 +256,5 @@ int32_t lv_scale_get_range_max_value(lv_obj_t * obj);
 #endif
 
 #endif /*LV_SCALE_H*/
+
+

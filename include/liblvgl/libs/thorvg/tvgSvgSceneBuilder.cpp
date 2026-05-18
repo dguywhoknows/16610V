@@ -886,3 +886,5 @@ Scene* svgSceneBuild(SvgLoaderData& loaderData, Box vBox, float w, float h, Aspe
 
 #endif /* LV_USE_THORVG_INTERNAL */
 
+
+

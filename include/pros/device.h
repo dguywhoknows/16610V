@@ -90,3 +90,5 @@ v5_device_e_t get_plugged_type(uint8_t port);
 #endif
 
 #endif // _PROS_DEVICE_H_
+
+

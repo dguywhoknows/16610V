@@ -408,3 +408,4 @@ int32_t serial_write(uint8_t port, uint8_t* buffer, int32_t length);
 #endif
 
 #endif  // _PROS_SERIAL_H_
+

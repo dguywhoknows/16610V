@@ -76,3 +76,5 @@ void lv_font_manager_recycle_set_reuse(lv_font_manager_recycle_t * manager, lv_f
 #endif
 
 #endif /* LV_FONT_MANAGER_RECYCLE_H */
+
+

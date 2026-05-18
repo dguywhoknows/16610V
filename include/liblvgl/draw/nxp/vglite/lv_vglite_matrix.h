@@ -76,3 +76,5 @@ void vglite_set_transformation_matrix(const lv_area_t * dest_area, const lv_draw
 #endif
 
 #endif /*LV_VGLITE_MATRIX_H*/
+
+

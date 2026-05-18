@@ -82,3 +82,5 @@ void _lv_svg_dump_tree(lv_svg_node_t * root, int depth);
 #endif /*LV_USE_SVG*/
 
 #endif /*LV_SVG_PARSER_H*/
+
+

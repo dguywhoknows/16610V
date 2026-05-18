@@ -127,3 +127,5 @@ lv_anim_t * lv_animimg_get_anim(lv_obj_t * img);
 #endif
 
 #endif /*LV_ANIMIMAGE_H*/
+
+

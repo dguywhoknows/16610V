@@ -436,3 +436,4 @@ void lcd_set_text_align(text_align_e_t alignment);
 }  // extern "C"
 #endif
 #endif  // _LIBLVGL_LLEMU_H_
+

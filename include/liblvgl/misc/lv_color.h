@@ -427,3 +427,5 @@ LV_ATTRIBUTE_EXTERN_DATA extern const lv_color_filter_dsc_t lv_color_filter_shad
 #endif
 
 #endif /*LV_COLOR_H*/
+
+

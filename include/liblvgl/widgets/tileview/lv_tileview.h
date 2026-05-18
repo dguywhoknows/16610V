@@ -84,3 +84,5 @@ lv_obj_t * lv_tileview_get_tile_active(lv_obj_t * obj);
 #endif
 
 #endif /*LV_TILEVIEW_H*/
+
+

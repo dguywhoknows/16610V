@@ -85,3 +85,5 @@ void lv_draw_sdl_mask_rect(lv_draw_unit_t * draw_unit, const lv_draw_mask_rect_d
 #endif
 
 #endif /*LV_DRAW_SDL_H*/
+
+

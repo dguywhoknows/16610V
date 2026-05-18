@@ -164,3 +164,5 @@ char * lv_strchr(const char * str, int c);
 #endif
 
 #endif /*LV_STRING_H*/
+
+

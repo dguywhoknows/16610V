@@ -68,3 +68,5 @@ bool _lv_svg_tokenizer(const char * svg_data, uint32_t len, svg_token_process cb
 #endif /*LV_USE_SVG*/
 
 #endif /*LV_SVG_TOKEN_H*/
+
+

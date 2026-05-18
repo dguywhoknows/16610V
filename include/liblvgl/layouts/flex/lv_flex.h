@@ -100,3 +100,5 @@ void lv_obj_set_flex_grow(lv_obj_t * obj, uint8_t grow);
 #endif
 
 #endif /*LV_FLEX_H*/
+
+

@@ -116,3 +116,5 @@ bool lv_line_get_y_invert(const lv_obj_t * obj);
 #endif
 
 #endif /*LV_LINE_H*/
+
+

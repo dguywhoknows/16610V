@@ -60,3 +60,5 @@ struct _lv_cover_check_info_t {
 #endif
 
 #endif /*LV_OBJ_EVENT_PRIVATE_H*/
+
+

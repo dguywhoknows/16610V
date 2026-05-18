@@ -72,3 +72,5 @@ struct _lv_label_t {
 #endif
 
 #endif /*LV_LABEL_PRIVATE_H*/
+
+

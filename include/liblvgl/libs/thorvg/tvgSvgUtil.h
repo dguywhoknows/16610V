@@ -34,3 +34,5 @@ size_t svgUtilURLDecode(const char *src, char** dst);
 
 #endif /* LV_USE_THORVG_INTERNAL */
 
+
+

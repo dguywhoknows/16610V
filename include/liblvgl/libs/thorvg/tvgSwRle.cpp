@@ -1132,3 +1132,5 @@ void rleClipRect(SwRleData *rle, const SwBBox* clip)
 
 #endif /* LV_USE_THORVG_INTERNAL */
 
+
+

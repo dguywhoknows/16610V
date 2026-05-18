@@ -66,3 +66,4 @@ class ExitCondition {
         bool done = false;
 };
 } // namespace lemlib
+

@@ -82,3 +82,5 @@ lv_switch_orientation_t lv_switch_get_orientation(lv_obj_t * obj);
 #endif
 
 #endif /*LV_SWITCH_H*/
+
+

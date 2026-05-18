@@ -1,11 +1,8 @@
 #ifndef CUSTOMLCD_HPP
 #define CUSTOMLCD_HPP
-
 #pragma once
 #include "main.h"
 #include <string>
-#include <vector>
-
 class Button {
 public:
     int x;
@@ -26,12 +23,10 @@ public:
         uint32_t textColor = pros::c::COLOR_WHITE
     );
 
-    bool isPressed(int touchX, int touchY);
-    
+    bool isPressed(int touchX, int touchY) const;
     bool isPressed();
 };
-
 void initUI();
 void updateUI();
-
 #endif
+

@@ -247,3 +247,5 @@ float bezAngleAt(const Bezier& bz, float t)
 }
 
 #endif /* LV_USE_THORVG_INTERNAL */
+
+

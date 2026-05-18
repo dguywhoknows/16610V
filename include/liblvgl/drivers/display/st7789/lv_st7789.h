@@ -92,3 +92,5 @@ void lv_st7789_send_cmd_list(lv_display_t * disp, const uint8_t * cmd_list);
 #endif
 
 #endif /*LV_ST7789_H*/
+
+

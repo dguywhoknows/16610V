@@ -104,3 +104,5 @@ void lv_font_manager_delete_font(lv_font_manager_t * manager, lv_font_t * font);
 #endif
 
 #endif /* FONT_MANAGER_MANAGER_H */
+
+

@@ -50,3 +50,5 @@ struct _lv_canvas_t {
 #endif
 
 #endif /*LV_CANVAS_PRIVATE_H*/
+
+

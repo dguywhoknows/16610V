@@ -332,3 +332,5 @@ void lv_svg_node_delete(lv_svg_node_t * node);
 #endif /*LV_USE_SVG*/
 
 #endif /*LV_SVG_H*/
+
+

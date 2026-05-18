@@ -57,3 +57,5 @@ struct _lv_spinbox_t {
 #endif
 
 #endif /*LV_SPINBOX_PRIVATE_H*/
+
+

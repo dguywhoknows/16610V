@@ -63,3 +63,5 @@ lv_display_t * lv_st_ltdc_create_partial(void * render_buf_1, void * render_buf_
 #endif
 
 #endif /*LV_ST_LTDC_H*/
+
+

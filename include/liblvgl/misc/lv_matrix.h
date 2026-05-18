@@ -127,3 +127,5 @@ bool lv_matrix_is_identity_or_translation(const lv_matrix_t * matrix);
 #endif
 
 #endif /*LV_MATRIX_H*/
+
+

@@ -12,27 +12,29 @@ void on_center_button() {}
 void initialize() {
 	pros::lcd::initialize();
 	initializeGlobals();
-    pros::Task amclTask([]{
-        pros::delay(2000); 
-
-        std::vector<dist_sensor> amcl_sensors = {
+    pros::Task mclTask([]{
+        pros::delay(2000);
+        std::vector<dist_sensor> mcl_sensors = {
             {distanceSensor1, lemlib::Pose(0, 5, 0)},
             {distanceSensor2, lemlib::Pose(-5, 0, 270)},
             {distanceSensor3, lemlib::Pose(5, 0, 90)}
         };
-
         lemlib::Pose lastPose = chassis.getPose();
-        amcl_init(lastPose);
-
+        mcl_init(lastPose);
+        const int delay_ms = 20;
         while (true) {
             lemlib::Pose currentPose = chassis.getPose();
-            
-            amcl_update(currentPose.x - lastPose.x, currentPose.y - lastPose.y, currentPose.theta - lastPose.theta);
-            
-            amcl_sense(amcl_sensors);
-
-            lastPose = currentPose;
-            pros::delay(20);
+            double dx = currentPose.x - lastPose.x;
+            double dy = currentPose.y - lastPose.y;
+            double dtheta = currentPose.theta - lastPose.theta;
+            double distance_moved = sqrt((dx * dx) + (dy * dy));
+            double current_speed = distance_moved / (delay_ms / 1000.0);
+            mcl_update(dx, dy, dtheta);
+            mcl_sense(mcl_sensors);
+            lemlib::Pose fusedPose = mcl_get_fused_pose(currentPose, current_speed);
+            chassis.setPose(fusedPose.x, fusedPose.y, fusedPose.theta);
+            lastPose = chassis.getPose(); 
+            pros::delay(delay_ms);
         }
     });
 }
@@ -61,3 +63,4 @@ void opcontrol() {
         }
     }
 }
+

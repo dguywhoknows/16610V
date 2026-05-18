@@ -351,3 +351,5 @@ void lv_textarea_cursor_up(lv_obj_t * obj);
 #endif
 
 #endif /*LV_TEXTAREA_H*/
+
+

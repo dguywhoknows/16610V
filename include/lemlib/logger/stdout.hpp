@@ -32,3 +32,5 @@ class BufferedStdout : public Buffer {
  */
 BufferedStdout& bufferedStdout();
 } // namespace lemlib
+
+

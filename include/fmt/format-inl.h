@@ -1536,3 +1536,5 @@ FMT_FUNC auto is_printable(uint32_t cp) -> bool {
 FMT_END_NAMESPACE
 
 #endif // FMT_FORMAT_INL_H_
+
+

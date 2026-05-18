@@ -788,3 +788,5 @@ void fillFree(SwFill* fill)
 
 #endif /* LV_USE_THORVG_INTERNAL */
 
+
+

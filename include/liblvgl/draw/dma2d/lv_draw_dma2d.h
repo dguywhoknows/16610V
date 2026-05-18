@@ -47,3 +47,5 @@ void lv_draw_dma2d_transfer_complete_interrupt_handler(void);
 #endif
 
 #endif /*LV_DRAW_DMA2D_H*/
+
+

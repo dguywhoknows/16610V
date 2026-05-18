@@ -96,3 +96,5 @@ void lv_draw_svg(lv_layer_t * layer, const lv_svg_node_t * svg_doc);
 #endif /*LV_USE_SVG*/
 
 #endif /*LV_SVG_RENDER_H*/
+
+

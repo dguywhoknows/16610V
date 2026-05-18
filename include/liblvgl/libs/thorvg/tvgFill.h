@@ -116,3 +116,5 @@ struct LinearGradient::Impl
 
 #endif /* LV_USE_THORVG_INTERNAL */
 
+
+

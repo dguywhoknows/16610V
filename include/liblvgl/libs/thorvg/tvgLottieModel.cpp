@@ -422,3 +422,5 @@ LottieComposition::~LottieComposition()
 
 #endif /* LV_USE_THORVG_INTERNAL */
 
+
+

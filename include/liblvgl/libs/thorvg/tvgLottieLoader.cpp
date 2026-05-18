@@ -405,3 +405,5 @@ bool LottieLoader::segment(const char* marker, float& begin, float& end)
 
 #endif /* LV_USE_THORVG_INTERNAL */
 
+
+

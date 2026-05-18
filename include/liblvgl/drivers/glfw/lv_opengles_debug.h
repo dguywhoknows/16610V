@@ -38,3 +38,5 @@ void GLLogCall(const char * function, const char * file, int line);
 #endif
 
 #endif /* LV_OPENGLES_DEBUG_H */
+
+

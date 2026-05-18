@@ -80,3 +80,5 @@ void lv_image_cache_dump(void);
 #endif
 
 #endif /*LV_IMAGE_CACHE_H*/
+
+

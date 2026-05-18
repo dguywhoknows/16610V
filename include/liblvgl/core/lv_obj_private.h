@@ -86,3 +86,5 @@ struct _lv_obj_t {
 #endif
 
 #endif /*LV_OBJ_PRIVATE_H*/
+
+

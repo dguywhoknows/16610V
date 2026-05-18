@@ -56,3 +56,5 @@ void lv_rlottie_set_current_frame(lv_obj_t * rlottie, const size_t goto_frame);
 #endif
 
 #endif /*LV_RLOTTIE_H*/
+
+

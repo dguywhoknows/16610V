@@ -79,3 +79,5 @@ lv_obj_t * lv_templ_create(lv_obj_t * parent);
 #endif
 
 #endif /*LV_TEMPL_H*/
+
+

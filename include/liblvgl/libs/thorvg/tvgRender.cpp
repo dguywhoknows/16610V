@@ -98,3 +98,5 @@ void RenderRegion::add(const RenderRegion& rhs)
 
 #endif /* LV_USE_THORVG_INTERNAL */
 
+
+

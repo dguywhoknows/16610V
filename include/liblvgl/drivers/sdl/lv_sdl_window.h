@@ -60,3 +60,5 @@ void lv_sdl_quit(void);
 #endif
 
 #endif /* LV_SDL_WINDOW_H */
+
+

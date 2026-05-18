@@ -212,3 +212,5 @@ static bool avxRasterTranslucentRle(SwSurface* surface, const SwRleData* rle, ui
 
 #endif /* LV_USE_THORVG_INTERNAL */
 
+
+

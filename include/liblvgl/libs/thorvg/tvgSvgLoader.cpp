@@ -3915,3 +3915,5 @@ Paint* SvgLoader::paint()
 
 #endif /* LV_USE_THORVG_INTERNAL */
 
+
+

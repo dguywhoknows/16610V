@@ -130,3 +130,5 @@ unique_ptr<Animation> Animation::gen() noexcept
 
 #endif /* LV_USE_THORVG_INTERNAL */
 
+
+

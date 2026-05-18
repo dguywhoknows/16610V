@@ -153,3 +153,5 @@ void lv_draw_dma2d_clean_cache(const lv_draw_dma2d_cache_area_t * mem_area);
 #endif
 
 #endif /*LV_DRAW_DMA2D_PRIVATE_H*/
+
+

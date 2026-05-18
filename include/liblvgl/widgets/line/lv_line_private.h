@@ -55,3 +55,5 @@ struct _lv_line_t {
 #endif
 
 #endif /*LV_LINE_PRIVATE_H*/
+
+

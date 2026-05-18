@@ -102,3 +102,5 @@ void lv_gif_set_loop_count(lv_obj_t * obj, int32_t count);
 #endif
 
 #endif /*LV_GIF_H*/
+
+

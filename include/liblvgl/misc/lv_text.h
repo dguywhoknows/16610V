@@ -123,3 +123,5 @@ bool lv_text_is_cmd(lv_text_cmd_state_t * state, uint32_t c);
 #endif
 
 #endif /*LV_TEXT_H*/
+
+

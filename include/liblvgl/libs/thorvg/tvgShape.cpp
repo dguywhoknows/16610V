@@ -409,3 +409,5 @@ FillRule Shape::fillRule() const noexcept
 
 #endif /* LV_USE_THORVG_INTERNAL */
 
+
+

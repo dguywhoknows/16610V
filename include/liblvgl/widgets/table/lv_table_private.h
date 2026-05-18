@@ -62,3 +62,5 @@ struct _lv_table_t {
 #endif
 
 #endif /*LV_TABLE_PRIVATE_H*/
+
+

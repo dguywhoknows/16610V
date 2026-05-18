@@ -264,3 +264,4 @@ extern "C" {
 #endif
 
 #endif /*LV_CONF_KCONFIG_H*/
+

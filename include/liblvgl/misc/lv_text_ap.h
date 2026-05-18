@@ -47,3 +47,5 @@ void lv_text_ap_proc(const char * txt, char * txt_out);
 #endif
 
 #endif /*LV_TEXT_AP_H*/
+
+

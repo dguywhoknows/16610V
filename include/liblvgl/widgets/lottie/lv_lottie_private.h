@@ -58,3 +58,5 @@ typedef struct {
 #endif
 
 #endif /*LV_LOTTIE_PRIVATE_H*/
+
+

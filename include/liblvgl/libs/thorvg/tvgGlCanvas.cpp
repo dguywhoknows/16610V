@@ -94,3 +94,5 @@ unique_ptr<GlCanvas> GlCanvas::gen() noexcept
 
 #endif /* LV_USE_THORVG_INTERNAL */
 
+
+

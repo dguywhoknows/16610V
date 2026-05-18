@@ -869,3 +869,5 @@ TVG_API Tvg_Result tvg_lottie_animation_get_marker(Tvg_Animation* animation, uin
 
 #endif /* LV_USE_THORVG_INTERNAL */
 
+
+

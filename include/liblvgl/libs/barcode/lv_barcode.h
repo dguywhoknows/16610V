@@ -116,3 +116,5 @@ uint16_t lv_barcode_get_scale(lv_obj_t * obj);
 #endif
 
 #endif /*LV_BARCODE_H*/
+
+

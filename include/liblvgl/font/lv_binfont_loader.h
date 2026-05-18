@@ -59,3 +59,5 @@ void lv_binfont_destroy(lv_font_t * font);
 #endif
 
 #endif /* LV_BINFONT_LOADER_H */
+
+

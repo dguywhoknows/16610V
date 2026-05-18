@@ -116,3 +116,5 @@ unique_ptr<SwCanvas> SwCanvas::gen() noexcept
 
 #endif /* LV_USE_THORVG_INTERNAL */
 
+
+

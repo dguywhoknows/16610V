@@ -246,3 +246,5 @@ char* strDirname(const char* path)
 
 #endif /* LV_USE_THORVG_INTERNAL */
 
+
+

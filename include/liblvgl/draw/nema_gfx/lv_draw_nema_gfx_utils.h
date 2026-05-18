@@ -123,3 +123,4 @@ void lv_nemagfx_grad_set(NEMA_VG_GRAD_HANDLE gradient, lv_grad_dsc_t lv_grad, lv
 #endif
 
 #endif /*LV_DRAW_NEMA_GFX_UTILS_H*/
+

@@ -73,3 +73,4 @@ class ExpoDriveCurve : public DriveCurve {
         const float curveGain = 1;
 };
 } // namespace lemlib
+
