@@ -260,8 +260,8 @@ void mcl_sense(std::vector<dist_sensor>& sensors) {
         }
 
         double random_particle_prob = std::max(0.0, 1.0 - (w_fast / w_slow));
-        // w_fast << w_slow → filter is degrading - inject random particles to help recover
-        // w_fast >= w_slow → filter is healthy - no injection
+        // w_fast << w_slow - filter is degrading - inject random particles to help recover
+        // w_fast >= w_slow - filter is healthy - no injection
 
         std::vector<Particle> new_particles;
         new_particles.reserve(particles.size());
@@ -288,7 +288,7 @@ void mcl_sense(std::vector<dist_sensor>& sensors) {
                 rand_p.weight = M_inv;
                 new_particles.push_back(rand_p);
             } else {
-                // systematic resampling — select particles proportional to weight
+                // systematic resampling - select particles proportional to weight
                 double U = r + m * M_inv; // pointer on the [0,1] cumulative weight axis
 
                 while (U > c && i < N - 1) { // walk cumulative sum until we reach the pointer
