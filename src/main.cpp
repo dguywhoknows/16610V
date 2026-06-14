@@ -69,8 +69,8 @@ void opcontrol() {   // called at the start of driver control or by default when
         driveRightMotors.move(std::clamp(forward - turn, -127, 127)); // arcade mix: right motors = forward - turn
         // std::clamp keeps value inside [-127, 127] so we never send an out-of-range command
 
-        if (master.get_digital_new_press(DIGITAL_Y)) { // checks if Y was JUST pressed this frame (not held — fires once per press)
-            Paths::runAutonomous();                     // re-runs autonomous — useful for testing during driver practice
+        if (master.get_digital_new_press(DIGITAL_Y)) { // checks if Y was JUST pressed this frame (not held, fires once per press)
+            Paths::runAutonomous();                     // runs autonomous, useful for testing
         }
     }
 }
