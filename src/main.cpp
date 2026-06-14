@@ -27,7 +27,7 @@ void initialize() {                         // PROS calls this once at startup b
 
         const int delay_ms = 20; // MCL loop runs every 20 milliseconds = 50 times per second
 
-        while (true) {                             // infinite loop — keeps running for the entire match
+        while (true) {                             // infinite loop - keeps running for the entire match
             lemlib::Pose currentPose = chassis.getPose(); // reads the current odometry pose (x, y, heading) from LemLib
 
             double dx = currentPose.x - lastPose.x;            // how far the robot moved in X since the last loop
