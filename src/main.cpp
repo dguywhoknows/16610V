@@ -1,7 +1,7 @@
 #include "main.h"          // pulls in all core PROS APIs (motors, sensors, tasks, etc.)
 #include <algorithm>        // gives us std::clamp so we can cap motor values to [-127, 127]
-#include "globals.hpp"      // our own file — declares every motor, sensor, and chassis object
-#include "paths.hpp"        // our own file — declares Paths::runAutonomous()
+#include "globals.hpp"      // our own file, declares every motor, sensor, and chassis object
+#include "paths.hpp"        // our own file, declares Paths::runAutonomous()
 #include "lemlib/chassis/chassis.hpp" // LemLib library — chassis class for movement and odometry
 #include "pros/adi.hpp"     // PROS API for 3-wire (ADI) ports — used for pneumatics
 #include "pros/motors.hpp"  // PROS API for V5 motors — move(), get_position(), etc.
