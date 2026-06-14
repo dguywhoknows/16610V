@@ -21,9 +21,9 @@ pros::Motor something3(1);
 pros::Motor something4(1);
 
 // --- Sensor Definitions ---
-pros::Imu imu(1);
-pros::Rotation verticalRotation(1);
-pros::Rotation horizontalRotation(1);
+pros::Imu imu(9);
+pros::Rotation verticalRotation(7);
+pros::Rotation horizontalRotation(8);
 pros::Rotation liftSensor(1);
 pros::Distance distanceSensor1(1);
 pros::Distance distanceSensor2(1);
@@ -38,18 +38,18 @@ pros::adi::DigitalOut something5('A');
 pros::adi::DigitalOut something6('A');
 pros::adi::DigitalOut something7('A');
 
-pros::Motor leftMotor1(1); pros::Motor leftMotor2(1); pros::Motor leftMotor3(1);
-pros::Motor rightMotor1(1); pros::Motor rightMotor2(1); pros::Motor rightMotor3(1);
+pros::Motor leftMotor1(-1); pros::Motor leftMotor2(-2); pros::Motor leftMotor3(-3);
+pros::Motor rightMotor1(4); pros::Motor rightMotor2(5); pros::Motor rightMotor3(6);
 
-pros::MotorGroup driveLeftMotors({1, 1, 1});
-pros::MotorGroup driveRightMotors({1, 1, 1});
-pros::MotorGroup fullDrive({1, 1, 1, 1, 1, 1});
+pros::MotorGroup driveLeftMotors({-1, -2, -3});
+pros::MotorGroup driveRightMotors({4, 5, 6});
+pros::MotorGroup fullDrive({-1, -2, -3, 4, 5, 6});
 
 constexpr double driveWheelDiameter = 1.0;
 constexpr double odomWheelDiameter = 1.0;
 constexpr double trackingWidth = 1.0;
 
-int currentPage = 0; // 0 = Home, 1 = Auton, 4 = Sensors
+int currentPage = 0;
 std::string allianceColor = "RED";
 bool controllerEnabled = true;
 int currentStartingPos = 4;
