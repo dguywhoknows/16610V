@@ -375,7 +375,7 @@ static void drawAutonPopup() {
 static void processTouches(const pros::screen_touch_status_s_t& touch, const HomeButtons& homeBtns) {
 
     bool isNewClick = (touch.touch_status == pros::E_TOUCH_PRESSED) && !wasScreenTouched;
-    // only fire once per press — detects rising edge (was not touched last frame, is touched this frame)
+    // only fire once per press, detects rising edge (was not touched last frame, is touched this frame)
     wasScreenTouched = (touch.touch_status == pros::E_TOUCH_PRESSED); // update state for next frame
     if (!isNewClick) return; // if this isn't a new press, ignore everything below
 
@@ -405,15 +405,15 @@ static void processTouches(const pros::screen_touch_status_s_t& touch, const Hom
     if (currentPage != 0 && touch.x >= 425 && touch.x <= 475 && touch.y >= 2 && touch.y <= 30) {
         if (currentPage == 5) { // leaving the Tune PID page — check if we should restore original values
             if (!keepLateralPID) { // restore lateral PID if user didn't click KEEP
-                lateralSettings.kP   = originalLateralkP;
-                lateralSettings.kI   = originalLateralkI;
-                lateralSettings.kD   = originalLateralkD;
+                lateralSettings.kP = originalLateralkP;
+                lateralSettings.kI = originalLateralkI;
+                lateralSettings.kD = originalLateralkD;
                 lateralSettings.slew = originalLateralSlew;
             }
             if (!keepAngularPID) { // restore angular PID if user didn't click KEEP
-                angularSettings.kP   = originalAngularkP;
-                angularSettings.kI   = originalAngularkI;
-                angularSettings.kD   = originalAngularkD;
+                angularSettings.kP = originalAngularkP;
+                angularSettings.kI = originalAngularkI;
+                angularSettings.kD = originalAngularkD;
                 angularSettings.slew = originalAngularSlew;
             }
         }
