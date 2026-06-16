@@ -1,23 +1,23 @@
 #include "distSensorUtil.hpp" // declares Particle struct, dist_sensor struct, and all function signatures
 #include "globals.hpp"        // access to chassis, motors, sensors
 #include <cmath>              // sin(), cos(), atan2(), sqrt(), exp(), fmod(), abs()
-#include <iostream>           // std::cout — for debug prints to serial console
+#include <iostream>           // std::cout: for debug prints to serial console
 #include <algorithm>          // std::max(), std::clamp(), std::abs()
 #include <random>             // mt19937 Mersenne Twister RNG and distributions
 
-static std::vector<Particle> particles; // the particle set — each Particle has a pose (x, y, theta) and a weight
+static std::vector<Particle> particles; // the particle set: each Particle has a pose (x, y, theta) and a weight
 
 static const double mcl_stdev = 3.0; // Gaussian sensor model standard deviation in inches
 // a particle 3" off from the true wall distance gets ~60% weight; 6" off gets ~14%
 
-static std::mt19937 gen(std::random_device{}()); // Mersenne Twister RNG seeded from hardware entropy — used for all random sampling
+static std::mt19937 gen(std::random_device{}()); // Mersenne Twister RNG seeded from hardware entropy: used for all random sampling
 
-static double w_slow = 0.0; // slow exponential moving average of particle weights — tracks long-term filter quality
-static double w_fast = 0.0; // fast exponential moving average — tracks short-term quality spikes
+static double w_slow = 0.0; // slow exponential moving average of particle weights: tracks long-term filter quality
+static double w_fast = 0.0; // fast exponential moving average: tracks short-term quality spikes
 // when w_fast drops below w_slow, the filter is getting worse → inject random particles to recover
 
-static const double alpha_slow = 0.05; // learning rate for w_slow — ~20 sample memory, reacts slowly
-static const double alpha_fast = 0.2;  // learning rate for w_fast — ~5 sample memory, reacts quickly
+static const double alpha_slow = 0.05; // learning rate for w_slow: ~20 sample memory, reacts slowly
+static const double alpha_fast = 0.2;  // learning rate for w_fast: ~5 sample memory, reacts quickly
 
 bool correct_position(dist_sensor sensor, lemlib::Chassis *chassis, bool is_x_wall, bool forced, double correct_rate) {
     // simple single-sensor correction, reads one distance sensor and snaps X or Y to the known field wall
@@ -43,7 +43,7 @@ bool correct_position(dist_sensor sensor, lemlib::Chassis *chassis, bool is_x_wa
     double wall_x = currentPos.x + offset_x + distanceValue * sin(s_rad); // project along ray to find where wall is in global X
     double wall_y = currentPos.y + offset_y + distanceValue * cos(s_rad); // project along ray to find where wall is in global Y
 
-    if (is_x_wall) { // correcting X axis — left/right walls at x = ±72 inches
+    if (is_x_wall) { // correcting X axis: left/right walls at x = ±72 inches
 
         double actual_wall = (wall_x > 0) ? 72.0 : -72.0; // real wall is +72 if we projected right, -72 if left
 
@@ -84,7 +84,7 @@ double get_expected_distance(lemlib::Pose p, lemlib::Pose offset, double& out_in
     double ray_dx = sin(s_rad); // X component of sensor ray direction (unit vector)
     double ray_dy = cos(s_rad); // Y component of sensor ray direction (unit vector)
 
-    double min_dist = 9999;         // start with max — find the closest wall
+    double min_dist = 9999;         // start with max: find the closest wall
     double norm_x = 0, norm_y = 0; // normal of the wall we hit
 
     if (std::abs(ray_dx) > 0.0001) { // only check X-walls if ray has X component (avoids division by zero)
@@ -295,7 +295,7 @@ void mcl_sense(std::vector<dist_sensor>& sensors) {
                     i++;
                     c += particles[i].weight;
                 }
-                // particles[i] is selected — high-weight particles cover more of [0,1] → duplicated more often
+                // particles[i] is selected: high-weight particles cover more of [0,1] → duplicated more often
 
                 Particle sampled = particles[i];
                 sampled.weight = M_inv; // reset to uniform weight
@@ -306,7 +306,7 @@ void mcl_sense(std::vector<dist_sensor>& sensors) {
         particles = std::move(new_particles); // replace old set with resampled one
 
     } else {
-        // all weights zero — reset to uniform so filter can recover
+        // all weights zero: reset to uniform so filter can recover
         double uniform_w = 1.0 / particles.size();
         for (auto& p : particles) p.weight = uniform_w;
     }

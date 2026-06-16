@@ -23,8 +23,8 @@ static std::vector<Button> autonSelectorButtons; // list of 8 buttons on the aut
 static double pathProgress = 0.0;                // animation counter for the moving dot along the path preview (0 to path.size()-1)
 static int pendingAutonIndex = -1;               // which auton the user tapped before confirming, held until YES/NO popup
 static bool showingAutonPopup = false;           // whether the "ARE YOU SURE?" confirmation popup is currently visible
-static int popupStartTime = 0;                   // millis() timestamp when the popup appeared — auto-dismisses after 5 seconds
-static bool wasScreenTouched = false;            // tracks whether the screen was touched last frame — used to detect new presses (rising edge)
+static int popupStartTime = 0;                   // millis() timestamp when the popup appeared: auto-dismisses after 5 seconds
+static bool wasScreenTouched = false;            // tracks whether the screen was touched last frame: used to detect new presses (rising edge)
 static int selectedMotorIndex = -1;              // which motor/group is currently selected on the motors page (-1 = none)
 static int selectedPistonIndex = -1;             // which piston is selected (not fully implemented yet)
 static int motorVoltage = 0;                     // current test voltage being sent to the selected motor (-127 to 127)
@@ -49,7 +49,7 @@ static uint32_t getTemperatureColor(double temp);                               
 // ---- PID tuning state ----
 static bool keepLateralPID = false;    // if true, lateral PID changes persist when leaving the Tune PID page
 static bool keepAngularPID = false;    // if true, angular PID changes persist when leaving the Tune PID page
-static double originalLateralkP = 0;  // snapshot of lateral kP when entering Tune PID — restored on exit if keepLateralPID is false
+static double originalLateralkP = 0;  // snapshot of lateral kP when entering Tune PID: restored on exit if keepLateralPID is false
 static double originalLateralkI = 0;  // snapshot of lateral kI
 static double originalLateralkD = 0;  // snapshot of lateral kD
 static double originalLateralSlew = 0;// snapshot of lateral slew
@@ -192,7 +192,7 @@ static void drawPath(int startingPos, int offsetX, int offsetY) {
 
     pathProgress += 0.02; // advance the animation counter each frame
     if (pathProgress >= path.size() - 1) {
-        pathProgress = 0; // reset when the dot reaches the end of the path — loops the animation
+        pathProgress = 0; // reset when the dot reaches the end of the path: loops the animation
     }
 }
 
@@ -230,13 +230,13 @@ static double getMotorTemperature(int index) {
         case 8: return rightMotor2.get_temperature(); // mid-right drive motor
         case 9: return rightMotor3.get_temperature(); // rear-right drive motor
     }
-    return 0; // unknown index — return 0
+    return 0; // unknown index: return 0
 }
 
 static uint32_t getTemperatureColor(double temp) {
-    if (temp < 35) return pros::c::COLOR_GREEN;  // cool — safe operating temp
-    if (temp < 50) return pros::c::COLOR_YELLOW; // warm — getting close to thermal throttle
-    return pros::c::COLOR_RED;                   // hot — motor is overheating, reduce use
+    if (temp < 35) return pros::c::COLOR_GREEN;  // cool: safe operating temp
+    if (temp < 50) return pros::c::COLOR_YELLOW; // warm: getting close to thermal throttle
+    return pros::c::COLOR_RED;                   // hot: motor is overheating, reduce use
 }
 
 static void applySelectedMotorVoltage() {
@@ -366,8 +366,8 @@ static void drawAutonPopup() {
     pros::screen::set_pen(pros::c::COLOR_BLACK);
     pros::screen::print(pros::E_TEXT_LARGE, 4, "ARE YOU SURE?"); // confirmation message in large text
 
-    Button yes = {140, 120, 100, 40, "YES"}; // confirm button — sets currentStartingPos to pendingAutonIndex
-    Button no  = {260, 120, 100, 40, "NO"};  // cancel button — dismisses popup without changing selection
+    Button yes = {140, 120, 100, 40, "YES"}; // confirm button: sets currentStartingPos to pendingAutonIndex
+    Button no  = {260, 120, 100, 40, "NO"};  // cancel button: dismisses popup without changing selection
     drawButton(yes);
     drawButton(no);
 }
@@ -397,13 +397,13 @@ static void processTouches(const pros::screen_touch_status_s_t& touch, const Hom
 
     // ---- Controller enable/disable toggle (top bar) ----
     if (touch.x >= 250 && touch.x <= 420 && touch.y >= 2 && touch.y <= 30) {
-        controllerEnabled = !controllerEnabled; // flip the flag — main opcontrol() checks this before reading input
+        controllerEnabled = !controllerEnabled; // flip the flag, main opcontrol() checks this before reading input
         return;
     }
 
     // ---- BACK button (top bar, only visible when not on home page) ----
     if (currentPage != 0 && touch.x >= 425 && touch.x <= 475 && touch.y >= 2 && touch.y <= 30) {
-        if (currentPage == 5) { // leaving the Tune PID page — check if we should restore original values
+        if (currentPage == 5) { // leaving the Tune PID page, check if we should restore original values
             if (!keepLateralPID) { // restore lateral PID if user didn't click KEEP
                 lateralSettings.kP = originalLateralkP;
                 lateralSettings.kI = originalLateralkI;
@@ -460,7 +460,7 @@ static void processTouches(const pros::screen_touch_status_s_t& touch, const Hom
         if (touch.x >= 10 && touch.x <= 230) { // tap is in the left motor list panel
             int relativeY = touch.y - 45; // convert touch Y to position relative to the first motor button
 
-            // map Y position ranges to motor indices — each button is 15px tall, with gaps between groups
+            // map Y position ranges to motor indices, each button is 15px tall, with gaps between groups
             if      (relativeY >= 0   && relativeY < 15)  selectedMotorIndex = 0;  // Motor 1
             else if (relativeY >= 15  && relativeY < 30)  selectedMotorIndex = 1;  // Motor 2
             else if (relativeY >= 30  && relativeY < 45)  selectedMotorIndex = 2;  // Motor 3
@@ -498,17 +498,17 @@ static void processTouches(const pros::screen_touch_status_s_t& touch, const Hom
 
     // ---- PID Tuning page ----
     else if (currentPage == 5) {
-        // RUN buttons — test lateral or angular PID with a 24" straight move
+        // RUN buttons, test lateral or angular PID with a 24" straight move
         if (touch.x > 10  && touch.x < 80  && touch.y > 50 && touch.y < 75) { // lateral RUN
             chassis.setPose(0, 0, 0, false);                                    // reset pose to origin
             chassis.moveToPoint(24, 0, 3000, {.maxSpeed = 127}, false);        // move 24" forward
         }
-        if (touch.x > 250 && touch.x < 320 && touch.y > 50 && touch.y < 75) { // angular RUN (duplicate — likely meant to do a turn)
+        if (touch.x > 250 && touch.x < 320 && touch.y > 50 && touch.y < 75) { // angular RUN (duplicate: likely meant to do a turn)
             chassis.setPose(0, 0, 0, false);
             chassis.moveToPoint(24, 0, 3000, {.maxSpeed = 127}, false);
         }
 
-        // LOG buttons — print current PID values to the screen for debugging
+        // LOG buttons, print current PID values to the screen for debugging
         if (touch.x > 90 && touch.x < 180 && touch.y > 50 && touch.y < 75) { // log lateral PID
             pros::screen::print(pros::E_TEXT_SMALL, 15, ("Lateral | Lift: " + std::to_string(liftSensor.get_position()) + " | kP:" + std::to_string(lateralSettings.kP) + " | kI:" + std::to_string(lateralSettings.kI) + " | kD:" + std::to_string(lateralSettings.kD) + " | Slew:" + std::to_string(lateralSettings.slew)).c_str());
         }
@@ -516,7 +516,7 @@ static void processTouches(const pros::screen_touch_status_s_t& touch, const Hom
             pros::screen::print(pros::E_TEXT_SMALL, 16, ("Angular | Lift: " + std::to_string(liftSensor.get_position()) + " | kP:" + std::to_string(angularSettings.kP) + " | kI:" + std::to_string(angularSettings.kI) + " | kD:" + std::to_string(angularSettings.kD) + " | Slew:" + std::to_string(angularSettings.slew)).c_str());
         }
 
-        // RESET buttons — restore original PID values
+        // RESET buttons, restore original PID values
         if (touch.x > 10  && touch.x < 90  && touch.y > 80 && touch.y < 100) { // reset lateral PID
             lateralSettings.kP   = originalLateralkP;
             lateralSettings.kI   = originalLateralkI;
@@ -530,7 +530,7 @@ static void processTouches(const pros::screen_touch_status_s_t& touch, const Hom
             angularSettings.slew = originalAngularSlew;
         }
 
-        // KEEP toggles — whether to save PID changes when leaving the page
+        // KEEP toggles, whether to save PID changes when leaving the page
         if (touch.x > 100 && touch.x < 200 && touch.y > 80 && touch.y < 100) keepLateralPID = !keepLateralPID; // toggle lateral keep
         if (touch.x > 340 && touch.x < 440 && touch.y > 80 && touch.y < 100) keepAngularPID = !keepAngularPID; // toggle angular keep
 
@@ -639,7 +639,7 @@ void updateUI() {
     HomeButtons homeBtns = getHomeButtons(); // build the home page buttons with current state (alliance color, etc.)
 
     // draw whichever page is currently active
-    if      (currentPage == 0) drawHomePage(homeBtns);  // home — navigation buttons
+    if      (currentPage == 0) drawHomePage(homeBtns);  // home: navigation buttons
     else if (currentPage == 1) drawAutonPage();          // auton selector with field preview
     else if (currentPage == 2) drawMotorsPage();         // motor test panel
     else if (currentPage == 3) drawControlsPage();       // driver controls reference

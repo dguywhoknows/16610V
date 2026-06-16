@@ -7,14 +7,14 @@
 #include "pros/motors.hpp"  // PROS API for V5 motors, move(), get_position(), etc.
 #include "distSensorUtil.hpp" // our own file, MCL particle filter functions (mcl_init, mcl_update, etc.)
 
-void on_center_button() {} // called when the center LCD button is pressed — left empty, no action needed
+void on_center_button() {} // called when the center LCD button is pressed: left empty, no action needed
 
 void initialize() {                         // PROS calls this once at startup before anything else runs
     pros::lcd::initialize();                // turns on the V5 brain's LCD screen so we can print debug info
     initializeGlobals();                    // runs our setup code: calibrates chassis, zeros encoders, etc.
 
     pros::Task mclTask([]{                  // creates a new background RTOS task that runs the MCL localization loop
-        pros::delay(2000);                  // waits 2 seconds before starting MCL — gives the IMU time to calibrate
+        pros::delay(2000);                  // waits 2 seconds before starting MCL: gives the IMU time to calibrate
 
         std::vector<dist_sensor> mcl_sensors = { // creates a list of the distance sensors MCL will use
             {distanceSensor1, lemlib::Pose(0, 5, 0)},    // front sensor: 5 inches forward of center, pointing forward (0°)
