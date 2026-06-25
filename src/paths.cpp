@@ -453,6 +453,9 @@ namespace Paths {
         chassis.turnToHeading(0, 700, {.minSpeed = 40}, false);
         pros::delay(20);
 
+        chassis.moveToPoint(-48, -24, 1200, {.forwards = false, .minSpeed = 40}, false);
+        pros::delay(20);
+
         endEffectorPiston.set_value(true);
         liftIntakePTO.set_value(true);
         liftMotor.move(127);
@@ -481,7 +484,7 @@ namespace Paths {
         intakeLift1.set_value(true);
         intakeLift2.set_value(true);
 
-        chassis.moveToPoint(-48, 24, 900, {.forwards = false, .minSpeed = 40}, false);
+        chassis.moveToPoint(-48, -24, 900, {.forwards = false, .minSpeed = 40}, false);
         pros::delay(20);
 
         endEffectorPiston.set_value(true);
