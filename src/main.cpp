@@ -134,16 +134,28 @@ void opcontrol() {
             endEffectorState = false;
         }
 
+        if(master.get_digital_new_press(DIGITAL_UP)) {
+            endEffectorPiston.set_value(true);
+            liftIntakePTO.set_value(true);
+            liftMotor.move(127);
+            scoringPiston.set_value(true);
+            pros::delay(700);
+            liftMotor.move(-127);
+            liftIntakePTO.set_value(false);
+            pros::delay(1000);
+            liftMotor.move(0);
+        }
+
+        if(master.get_digital_new_press(DIGITAL_X)) {
+            scoringPistonState = !scoringPistonState;
+        }
+
         if(master.get_digital_new_press(DIGITAL_LEFT)) {
             currentStartingPos -= 1;
         }
 
         if(master.get_digital_new_press(DIGITAL_RIGHT)) {
             currentStartingPos += 1;
-        }
-        
-        if(master.get_digital_new_press(DIGITAL_X)) {
-            scoringPistonState = !scoringPistonState;
         }
 
         if (master.get_digital_new_press(DIGITAL_Y)) {

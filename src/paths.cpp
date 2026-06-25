@@ -121,7 +121,7 @@ namespace Paths {
         chassis.moveToPoint(-63, 10, 700, {.forwards = true, .minSpeed = 40}, false);
         pros::delay(20);
 
-        chassis.turnToHeading(46.97, 700, {.minSpeed = 40}, false);
+        chassis.turnToHeading(226.97, 700, {.minSpeed = 40}, false);
         pros::delay(20);
 
         chassis.moveToPoint(-48, 24, 1500, {.forwards = false, .minSpeed = 40}, false);
@@ -137,6 +137,7 @@ namespace Paths {
         liftIntakePTO.set_value(false);
         pros::delay(700);
         endEffectorPiston.set_value(false);
+        liftMotor.move(0);
 
         chassis.turnToHeading(-90, 700, {.minSpeed = 40}, false);
         pros::delay(20);
@@ -167,6 +168,7 @@ namespace Paths {
         liftIntakePTO.set_value(false);
         pros::delay(700);
         endEffectorPiston.set_value(false);
+        liftMotor.move(0);
 
         chassis.turnToHeading(153.43, 700, {.minSpeed = 40}, false);
         pros::delay(20);
@@ -201,6 +203,7 @@ namespace Paths {
         liftIntakePTO.set_value(false);
         pros::delay(700);
         endEffectorPiston.set_value(false);
+        liftMotor.move(0);
 
         chassis.turnToHeading(-90, 1000, {.minSpeed = 40}, false);
         pros::delay(20);
@@ -231,6 +234,7 @@ namespace Paths {
         liftIntakePTO.set_value(false);
         pros::delay(700);
         endEffectorPiston.set_value(false);
+        liftMotor.move(0);
     }
 
     void path3() { //no last pin :( also make timeouts shorter if this is out of time
@@ -264,7 +268,7 @@ namespace Paths {
         chassis.moveToPoint(-63, 10, 700, {.forwards = true, .minSpeed = 40}, false);
         pros::delay(20);
 
-        chassis.turnToHeading(46.97, 700, {.minSpeed = 40}, false);
+        chassis.turnToHeading(226.97, 700, {.minSpeed = 40}, false);
         pros::delay(20);
 
         chassis.moveToPoint(-48, 24, 1500, {.forwards = false, .minSpeed = 40}, false);
@@ -280,6 +284,7 @@ namespace Paths {
         liftIntakePTO.set_value(false);
         pros::delay(700);
         endEffectorPiston.set_value(false);
+        liftMotor.move(0);
 
         chassis.turnToHeading(-90, 700, {.minSpeed = 40}, false);
         pros::delay(20);
@@ -310,6 +315,7 @@ namespace Paths {
         liftIntakePTO.set_value(false);
         pros::delay(700);
         endEffectorPiston.set_value(false);
+        liftMotor.move(0);
 
         chassis.turnToHeading(153.43, 700, {.minSpeed = 40}, false);
         pros::delay(20);
@@ -344,6 +350,7 @@ namespace Paths {
         liftIntakePTO.set_value(false);
         pros::delay(700);
         endEffectorPiston.set_value(false);
+        liftMotor.move(0);
     }
 
     void path2() { //no 2nd goal :( start with this after red and if its SOMEHOW out of time then make the timeouts shorter
@@ -377,7 +384,7 @@ namespace Paths {
         chassis.moveToPoint(-63, 10, 700, {.forwards = true, .minSpeed = 40}, false);
         pros::delay(20);
 
-        chassis.turnToHeading(46.97, 700, {.minSpeed = 40}, false);
+        chassis.turnToHeading(226.97, 700, {.minSpeed = 40}, false);
         pros::delay(20);
 
         chassis.moveToPoint(-48, 24, 1500, {.forwards = false, .minSpeed = 40}, false);
@@ -393,6 +400,7 @@ namespace Paths {
         liftIntakePTO.set_value(false);
         pros::delay(700);
         endEffectorPiston.set_value(false);
+        liftMotor.move(0);
 
         chassis.turnToHeading(-90, 700, {.minSpeed = 40}, false);
         pros::delay(20);
@@ -423,6 +431,7 @@ namespace Paths {
         liftIntakePTO.set_value(false);
         pros::delay(700);
         endEffectorPiston.set_value(false);
+        liftMotor.move(0);
     }
 
     void path1() { //red path, start with this
@@ -454,6 +463,7 @@ namespace Paths {
         liftIntakePTO.set_value(false);
         pros::delay(700);
         endEffectorPiston.set_value(false);
+        liftMotor.move(0);
 
         chassis.turnToHeading(-90, 700, {.minSpeed = 40}, false);
         pros::delay(20);
@@ -484,6 +494,7 @@ namespace Paths {
         liftIntakePTO.set_value(false);
         pros::delay(700);
         endEffectorPiston.set_value(false);
+        liftMotor.move(0);
     }
 
     void runAutonomous() {
