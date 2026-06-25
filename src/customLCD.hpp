@@ -1,3 +1,4 @@
+/*
 #ifndef CUSTOMLCD_HPP
 #define CUSTOMLCD_HPP
 #pragma once
@@ -30,3 +31,4 @@ void initUI();
 void updateUI();
 #endif
 
+*/

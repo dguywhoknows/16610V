@@ -1,76 +1,166 @@
-#include "main.h"          // pulls in all core PROS APIs (motors, sensors, tasks, etc.)
-#include <algorithm>        // gives us std::clamp so we can cap motor values to [-127, 127]
-#include "globals.hpp"      // our own file, declares every motor, sensor, and chassis object
-#include "paths.hpp"        // our own file, declares Paths::runAutonomous()
-#include "lemlib/chassis/chassis.hpp" // LemLib library, chassis class for movement and odometry
-#include "pros/adi.hpp"     // PROS API for 3-wire (ADI) ports, used for pneumatics
-#include "pros/motors.hpp"  // PROS API for V5 motors, move(), get_position(), etc.
-#include "distSensorUtil.hpp" // our own file, MCL particle filter functions (mcl_init, mcl_update, etc.)
+#include "main.h"
+#include <algorithm>
+#include "globals.hpp"
+#include "paths.hpp"
+#include "lemlib/chassis/chassis.hpp"
+#include "pros/adi.hpp"
+#include "pros/motors.hpp"
+#include "distSensorUtil.hpp"
 
-void on_center_button() {} // called when the center LCD button is pressed: left empty, no action needed
+void on_center_button() {}
 
-void initialize() {                         // PROS calls this once at startup before anything else runs
-    pros::lcd::initialize();                // turns on the V5 brain's LCD screen so we can print debug info
-    initializeGlobals();                    // runs our setup code: calibrates chassis, zeros encoders, etc.
+void initialize() {
+    pros::lcd::initialize();
+    initializeGlobals();
+    intakeLift1.set_value(true);
+    intakeLift2.set_value(true);
+    liftIntakePTO.set_value(false);
+    endEffectorPiston.set_value(false);
+    colorSorterPiston.set_value(false);
+    scoringPiston.set_value(false);
+/*
+    pros::Task mclTask([]{
+        pros::delay(2000);
 
-    pros::Task mclTask([]{                  // creates a new background RTOS task that runs the MCL localization loop
-        pros::delay(2000);                  // waits 2 seconds before starting MCL: gives the IMU time to calibrate
-
-        std::vector<dist_sensor> mcl_sensors = { // creates a list of the distance sensors MCL will use
-            {distanceSensor1, lemlib::Pose(0, 5, 0)},    // front sensor: 5 inches forward of center, pointing forward (0°)
-            {distanceSensor2, lemlib::Pose(-5, 0, 270)}, // left sensor: 5 inches left of center, pointing left (270°)
-            {distanceSensor3, lemlib::Pose(5, 0, 90)}    // right sensor: 5 inches right of center, pointing right (90°)
+        std::vector<dist_sensor> mcl_sensors = {
+            {distanceSensor1, lemlib::Pose(0, 5, 0)},
+            {distanceSensor2, lemlib::Pose(-5, 0, 270)},
+            {distanceSensor3, lemlib::Pose(5, 0, 90)}
         };
 
-        lemlib::Pose lastPose = chassis.getPose(); // saves the robot's starting pose so we can compute how far it moves each loop
-        mcl_init(lastPose);                        // initializes the particle filter with N particles spread around the starting pose
+        lemlib::Pose lastPose = chassis.getPose();
+        mcl_init(lastPose);
 
-        const int delay_ms = 20; // MCL loop runs every 20 milliseconds = 50 times per second
+        const int delay_ms = 20;
 
-        while (true) {                             // infinite loop - keeps running for the entire match
-            lemlib::Pose currentPose = chassis.getPose(); // reads the current odometry pose (x, y, heading) from LemLib
+        while (true) {
+            lemlib::Pose currentPose = chassis.getPose();
 
-            double dx = currentPose.x - lastPose.x;            // how far the robot moved in X since the last loop
-            double dy = currentPose.y - lastPose.y;            // how far the robot moved in Y since the last loop
-            double dtheta = currentPose.theta - lastPose.theta; // how much the robot turned since the last loop
+            double dx = currentPose.x - lastPose.x;
+            double dy = currentPose.y - lastPose.y;
+            double dtheta = currentPose.theta - lastPose.theta;
 
-            double distance_moved = sqrt((dx * dx) + (dy * dy)); // Pythagorean theorem - total distance traveled this cycle (inches)
-            double current_speed = distance_moved / (delay_ms / 1000.0); // speed = distance / time - inches per second
+            double distance_moved = sqrt((dx * dx) + (dy * dy));
+            double current_speed = distance_moved / (delay_ms / 1000.0);
 
-            mcl_update(dx, dy, dtheta);            // PREDICT step: moves all particles using the odometry delta + random noise
-            mcl_sense(mcl_sensors);                // SENSE + RESAMPLE step: weights particles by sensor readings, resamples the set
+            mcl_update(dx, dy, dtheta);
+            mcl_sense(mcl_sensors);
 
-            lemlib::Pose fusedPose = mcl_get_fused_pose(currentPose, current_speed); // blends odometry + MCL estimate into one pose
-            chassis.setPose(fusedPose.x, fusedPose.y, fusedPose.theta); // pushes the blended pose back into LemLib's odometry system
+            lemlib::Pose fusedPose = mcl_get_fused_pose(currentPose, current_speed);
+            chassis.setPose(fusedPose.x, fusedPose.y, fusedPose.theta);
 
-            lastPose = chassis.getPose(); // updates lastPose for next iteration (re-reads from chassis to stay in sync)
-            pros::delay(delay_ms);        // yields the task for 20 ms so other tasks (drive, auton) can run
+            lastPose = chassis.getPose();
+            pros::delay(delay_ms);
         }
     });
+    */
 }
 
-void disabled() {}               // called when the robot is disabled by field control, left empty, PROS stops motors automatically
-void competition_initialize() {} // called right before autonomous at competitions, left empty, nothing extra needed
+void disabled() {}
+void competition_initialize() {}
 
-void autonomous() {         // called at the start of the 15-second autonomous period
-    Paths::runAutonomous(); // hands off to our autonomous routine defined in paths.cpp
+void autonomous() {
+    Paths::runAutonomous();
 }
 
-void opcontrol() {   // called at the start of driver control or by default when the code is normally run in non-competition mode, loops forever
-    while (true) {   // infinite loop, keeps reading controller and driving until the match ends
+void opcontrol() {
+    bool intakeLiftState = true;
+    bool liftIntakePTOState = false;
+    bool endEffectorState = false;
+    bool colorSorterPistonState = false;
+    bool runningIntake = false;
+    bool scoringPistonState = false;
+    float intakePower = 0.0;
+    float liftPower = 0.0;
 
-        int forward = master.get_analog(ANALOG_LEFT_Y);      // reads left stick Y axis: positive = forward, negative = backward, range -127 to 127
-        int turn = master.get_analog(ANALOG_RIGHT_X) * 0.7;  // reads right stick X axis scaled to 70%, reduces spin sensitivity
+    while (true) {
+        int forward = master.get_analog(ANALOG_LEFT_Y);
+        int turn = master.get_analog(ANALOG_RIGHT_X) * 0.85;
 
-        if (abs(forward) < 20) forward = 0; // deadband: stick within 20 of center = treat as 0, prevents drift from resting thumb
-        if (abs(turn) < 20) turn = 0;       // same deadband for the turn axis
+        if (abs(forward) < 20) forward = 0;
+        if (abs(turn) < 20) turn = 0;
 
-        driveLeftMotors.move(std::clamp(forward + turn, -127, 127));  // arcade mix: left motors = forward + turn
-        driveRightMotors.move(std::clamp(forward - turn, -127, 127)); // arcade mix: right motors = forward - turn
-        // std::clamp keeps value inside [-127, 127] so we never send an out-of-range command
-
-        if (master.get_digital_new_press(DIGITAL_Y)) { // checks if Y was JUST pressed this frame (not held, fires once per press)
-            Paths::runAutonomous();                     // runs autonomous, useful for testing
+        if(master.get_digital_new_press(DIGITAL_R2)) {
+            intakeLiftState = false;
         }
+        if(master.get_digital_new_release(DIGITAL_R2)) {
+            intakeLiftState = true;
+        }
+
+        if(master.get_digital_new_press(DIGITAL_R1)) {
+            runningIntake = !runningIntake;
+        }
+
+        if(runningIntake) {
+            intakePower = 127;
+        } else {
+            intakePower = 0;
+        }
+
+        if(master.get_digital_new_press(DIGITAL_L1)) {
+            liftIntakePTOState = true;
+            liftPower = 127;
+            intakePower = 127;
+        }
+
+        if(master.get_digital_new_release(DIGITAL_L1)) {
+            liftIntakePTOState = false;
+        }
+
+        bool wasRunningIntake = runningIntake;
+
+        if(master.get_digital_new_press(DIGITAL_L2)) {
+            liftMotor.move(-127);
+            if(!runningIntake) {
+                liftIntakePTOState = true;
+                intakePower = -127;
+            }
+            if(master.get_digital_new_press(DIGITAL_R1)) {
+                liftIntakePTOState = false;
+                runningIntake = !runningIntake;
+                intakePower = 127;
+            }
+        }
+
+        if(master.get_digital_new_release(DIGITAL_L2) && !wasRunningIntake) {
+            liftIntakePTOState = false;
+        }
+
+        if(master.get_digital_new_press(DIGITAL_B)) {
+            endEffectorState = true;
+        }
+        
+        if(master.get_digital_new_press(DIGITAL_DOWN)) {
+            endEffectorState = false;
+        }
+
+        if(master.get_digital_new_press(DIGITAL_LEFT)) {
+            currentStartingPos -= 1;
+        }
+
+        if(master.get_digital_new_press(DIGITAL_RIGHT)) {
+            currentStartingPos += 1;
+        }
+        
+        if(master.get_digital_new_press(DIGITAL_X)) {
+            scoringPistonState = !scoringPistonState;
+        }
+
+        if (master.get_digital_new_press(DIGITAL_Y)) {
+            Paths::runAutonomous();
+        }
+
+        driveLeftMotors.move(std::clamp(forward + turn, -127, 127));
+        driveRightMotors.move(std::clamp(forward - turn, -127, 127));
+
+        intakeMotor1.move(intakePower);
+        intakeMotor2.move(intakePower);
+        liftMotor.move(liftPower);
+        intakeLift1.set_value(intakeLiftState);
+        intakeLift2.set_value(intakeLiftState);
+        liftIntakePTO.set_value(liftIntakePTOState);
+        endEffectorPiston.set_value(endEffectorState);
+        colorSorterPiston.set_value(colorSorterPistonState);
+        scoringPiston.set_value(scoringPistonState);
     }
 }

@@ -1,3 +1,4 @@
+/*
 #include "customLCD.hpp"   // header, declares Button class, initUI(), updateUI()
 #include "globals.hpp"     // access to all hardware objects: chassis, motors, sensors, PID settings
 #include "pros/colors.hpp" // color constants like COLOR_RED, COLOR_GREEN, COLOR_WHITE, etc.
@@ -657,3 +658,4 @@ void updateUI() {
 
     processTouches(pros::screen::touch_status(), homeBtns); // handle any touch input for this frame
 }
+    */

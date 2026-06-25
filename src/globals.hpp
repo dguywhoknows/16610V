@@ -14,7 +14,6 @@
 // --- Motors ---
 extern pros::Rotation verticalRotation;
 extern pros::Rotation horizontalRotation;
-extern pros::Rotation liftSensor;
 extern pros::Controller master;
 extern pros::Motor leftMotor1;
 extern pros::Motor leftMotor2;
@@ -22,10 +21,9 @@ extern pros::Motor leftMotor3;
 extern pros::Motor rightMotor1;
 extern pros::Motor rightMotor2;
 extern pros::Motor rightMotor3;
-extern pros::Motor something1; 
-extern pros::Motor something2;
-extern pros::Motor something3;
-extern pros::Motor something4;
+extern pros::Motor intakeMotor1; 
+extern pros::Motor intakeMotor2;
+extern pros::Motor liftMotor;
 extern pros::MotorGroup driveLeftMotors;
 extern pros::MotorGroup driveRightMotors;
 extern pros::MotorGroup fullDrive;
@@ -44,18 +42,21 @@ extern pros::Distance distanceSensor5;
 extern pros::Optical opticalSensor1;
 extern pros::Optical opticalSensor2;
 
-extern pros::adi::DigitalOut something5;
-extern pros::adi::DigitalOut something6;
-extern pros::adi::DigitalOut something7;
+extern pros::adi::DigitalOut intakeLift1;
+extern pros::adi::DigitalOut intakeLift2;
+extern pros::adi::DigitalOut liftIntakePTO;
+extern pros::adi::DigitalOut endEffectorPiston;
+extern pros::adi::DigitalOut colorSorterPiston;
+extern pros::adi::DigitalOut scoringPiston;
 
 extern lemlib::Chassis chassis;
 
 extern int currentPage;
 extern std::string allianceColor;
 extern bool controllerEnabled;
-extern int currentStartingPos; // 0-7, auton selection index
+extern int currentStartingPos; // 0-3, auton selection index
 extern std::vector<std::vector<std::vector<double>>> autonPaths;
 
-void initializeGlobals();
+extern void initializeGlobals();
 
 #endif

@@ -1,3 +1,4 @@
+/*
 #include "distSensorUtil.hpp" // declares Particle struct, dist_sensor struct, and all function signatures
 #include "globals.hpp"        // access to chassis, motors, sensors
 #include <cmath>              // sin(), cos(), atan2(), sqrt(), exp(), fmod(), abs()
@@ -417,3 +418,4 @@ lemlib::Pose mcl_get_fused_pose(lemlib::Pose odom_pose, double current_speed) {
 
     return lemlib::Pose(fused_x, fused_y, fused_theta);
 }
+*/

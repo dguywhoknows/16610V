@@ -1,3 +1,4 @@
+/*
 #ifndef DISTSENSORUTIL_HPP
 #define DISTSENSORUTIL_HPP
 
@@ -27,3 +28,4 @@ lemlib::Pose mcl_get_fused_pose(lemlib::Pose odomPose, double current_speed);
 void mcl_sync_with_chassis(lemlib::Chassis *chassis, double current_speed);
 
 #endif
+*/
