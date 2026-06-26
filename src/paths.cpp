@@ -139,7 +139,7 @@ namespace Paths {
         endEffectorPiston.set_value(false);
         liftMotor.move(0);
 
-        chassis.turnToHeading(-90, 700, {.minSpeed = 40}, false);
+        chassis.swingToHeading(-90, lemlib::DriveSide::RIGHT, 700, {.minSpeed = 40}, false);
         pros::delay(20);
 
         intakeLift1.set_value(false);
@@ -170,7 +170,7 @@ namespace Paths {
         endEffectorPiston.set_value(false);
         liftMotor.move(0);
 
-        chassis.turnToHeading(153.43, 700, {.minSpeed = 40}, false);
+        chassis.swingToHeading(153.43, lemlib::DriveSide::LEFT, 700, {.minSpeed = 40}, false);
         pros::delay(20);
 
         intakeLift1.set_value(false);
@@ -205,7 +205,7 @@ namespace Paths {
         endEffectorPiston.set_value(false);
         liftMotor.move(0);
 
-        chassis.turnToHeading(-90, 1000, {.minSpeed = 40}, false);
+        chassis.swingToHeading(-90, lemlib::DriveSide::LEFT, 1000, {.minSpeed = 40}, false);
         pros::delay(20);
 
         intakeLift1.set_value(false);
@@ -286,7 +286,7 @@ namespace Paths {
         endEffectorPiston.set_value(false);
         liftMotor.move(0);
 
-        chassis.turnToHeading(-90, 700, {.minSpeed = 40}, false);
+        chassis.swingToHeading(-90, lemlib::DriveSide::RIGHT, 700, {.minSpeed = 40}, false);
         pros::delay(20);
 
         intakeLift1.set_value(false);
@@ -317,7 +317,7 @@ namespace Paths {
         endEffectorPiston.set_value(false);
         liftMotor.move(0);
 
-        chassis.turnToHeading(153.43, 700, {.minSpeed = 40}, false);
+        chassis.swingToHeading(153.43, lemlib::DriveSide::LEFT, 700, {.minSpeed = 40}, false);
         pros::delay(20);
 
         intakeLift1.set_value(false);
@@ -402,7 +402,7 @@ namespace Paths {
         endEffectorPiston.set_value(false);
         liftMotor.move(0);
 
-        chassis.turnToHeading(-90, 700, {.minSpeed = 40}, false);
+        chassis.swingToHeading(-90, lemlib::DriveSide::RIGHT, 700, {.minSpeed = 40}, false);
         pros::delay(20);
 
         intakeLift1.set_value(false);
@@ -426,7 +426,7 @@ namespace Paths {
         liftMotor.move(127);
         scoringPiston.set_value(true);
         pros::delay(500);
-        
+
         liftIntakePTO.set_value(false);
         liftMotor.move(-127);
         pros::delay(700);
@@ -468,7 +468,7 @@ namespace Paths {
         endEffectorPiston.set_value(false);
         liftMotor.move(0);
 
-        chassis.turnToHeading(-90, 700, {.minSpeed = 40}, false);
+        chassis.swingToHeading(-90, lemlib::DriveSide::LEFT, 700, {.minSpeed = 40}, false);
         pros::delay(20);
 
         intakeLift1.set_value(false);
