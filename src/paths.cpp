@@ -133,8 +133,8 @@ namespace Paths {
         scoringPiston.set_value(true);
         pros::delay(500);
 
-        liftMotor.move(-127);
         liftIntakePTO.set_value(false);
+        liftMotor.move(-127);
         pros::delay(700);
         endEffectorPiston.set_value(false);
         liftMotor.move(0);
@@ -164,8 +164,8 @@ namespace Paths {
         scoringPiston.set_value(true);
         pros::delay(500);
 
-        liftMotor.move(-127);
         liftIntakePTO.set_value(false);
+        liftMotor.move(-127);
         pros::delay(700);
         endEffectorPiston.set_value(false);
         liftMotor.move(0);
@@ -199,8 +199,8 @@ namespace Paths {
         scoringPiston.set_value(true);
         pros::delay(500);
 
-        liftMotor.move(-127);
         liftIntakePTO.set_value(false);
+        liftMotor.move(-127);
         pros::delay(700);
         endEffectorPiston.set_value(false);
         liftMotor.move(0);
@@ -230,8 +230,8 @@ namespace Paths {
         scoringPiston.set_value(true);
         pros::delay(500);
 
-        liftMotor.move(-127);
         liftIntakePTO.set_value(false);
+        liftMotor.move(-127);
         pros::delay(700);
         endEffectorPiston.set_value(false);
         liftMotor.move(0);
@@ -280,8 +280,8 @@ namespace Paths {
         scoringPiston.set_value(true);
         pros::delay(500);
 
-        liftMotor.move(-127);
         liftIntakePTO.set_value(false);
+        liftMotor.move(-127);
         pros::delay(700);
         endEffectorPiston.set_value(false);
         liftMotor.move(0);
@@ -311,8 +311,8 @@ namespace Paths {
         scoringPiston.set_value(true);
         pros::delay(500);
 
-        liftMotor.move(-127);
         liftIntakePTO.set_value(false);
+        liftMotor.move(-127);
         pros::delay(700);
         endEffectorPiston.set_value(false);
         liftMotor.move(0);
@@ -346,8 +346,8 @@ namespace Paths {
         scoringPiston.set_value(true);
         pros::delay(500);
 
-        liftMotor.move(-127);
         liftIntakePTO.set_value(false);
+        liftMotor.move(-127);
         pros::delay(700);
         endEffectorPiston.set_value(false);
         liftMotor.move(0);
@@ -396,8 +396,8 @@ namespace Paths {
         scoringPiston.set_value(true);
         pros::delay(500);
 
-        liftMotor.move(-127);
         liftIntakePTO.set_value(false);
+        liftMotor.move(-127);
         pros::delay(700);
         endEffectorPiston.set_value(false);
         liftMotor.move(0);
@@ -426,9 +426,9 @@ namespace Paths {
         liftMotor.move(127);
         scoringPiston.set_value(true);
         pros::delay(500);
-
-        liftMotor.move(-127);
+        
         liftIntakePTO.set_value(false);
+        liftMotor.move(-127);
         pros::delay(700);
         endEffectorPiston.set_value(false);
         liftMotor.move(0);
@@ -461,9 +461,9 @@ namespace Paths {
         liftMotor.move(127);
         scoringPiston.set_value(true);
         pros::delay(500);
-
-        liftMotor.move(-127);
+        
         liftIntakePTO.set_value(false);
+        liftMotor.move(-127);
         pros::delay(700);
         endEffectorPiston.set_value(false);
         liftMotor.move(0);
@@ -493,8 +493,8 @@ namespace Paths {
         scoringPiston.set_value(true);
         pros::delay(500);
 
-        liftMotor.move(-127);
         liftIntakePTO.set_value(false);
+        liftMotor.move(-127);
         pros::delay(700);
         endEffectorPiston.set_value(false);
         liftMotor.move(0);
