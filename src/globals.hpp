@@ -11,7 +11,6 @@
 #include <vector>
 #include <string>
 
-// --- Motors ---
 extern pros::Rotation verticalRotation;
 extern pros::Rotation horizontalRotation;
 extern pros::Controller master;
@@ -27,6 +26,7 @@ extern pros::Motor liftMotor;
 extern pros::MotorGroup driveLeftMotors;
 extern pros::MotorGroup driveRightMotors;
 extern pros::MotorGroup fullDrive;
+extern pros::MotorGroup intakeMotors;
 
 extern lemlib::ControllerSettings lateralSettings;
 extern lemlib::ControllerSettings angularSettings;
@@ -43,7 +43,6 @@ extern pros::Optical opticalSensor1;
 extern pros::Optical opticalSensor2;
 
 extern pros::adi::DigitalOut intakeLift1;
-extern pros::adi::DigitalOut intakeLift2;
 extern pros::adi::DigitalOut liftIntakePTO;
 extern pros::adi::DigitalOut endEffectorPiston;
 extern pros::adi::DigitalOut colorSorterPiston;
@@ -51,11 +50,11 @@ extern pros::adi::DigitalOut scoringPiston;
 
 extern lemlib::Chassis chassis;
 
-extern int currentPage;
-extern std::string allianceColor;
-extern bool controllerEnabled;
-extern int currentStartingPos; // 0-3, auton selection index
-extern std::vector<std::vector<std::vector<double>>> autonPaths;
+//extern int currentPage;
+//extern std::string allianceColor;
+//extern bool controllerEnabled;
+extern int currentStartingPos;
+//extern std::vector<std::vector<std::vector<double>>> autonPaths;
 
 extern void initializeGlobals();
 

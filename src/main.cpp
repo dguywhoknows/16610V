@@ -9,11 +9,30 @@
 
 void on_center_button() {}
 
+void updateLCD(void* param) {
+    while(true) {
+        int vertRaw = verticalRotation.get_position();
+        int horzRaw = horizontalRotation.get_position();
+        double imuDeg = imu.get_heading();
+        lemlib::Pose pose = chassis.getPose(false);
+        pros::lcd::print(0, "Vert: %d  Horz: %d", vertRaw, horzRaw);
+        pros::lcd::print(1, "IMU: %.1f deg", imuDeg);
+        pros::lcd::print(2, "X: %.2f  Y: %.2f", pose.x, pose.y);
+        pros::lcd::print(3, "Theta: %.1f deg", pose.theta);
+        pros::lcd::print(4, "Starting Pos: %d", currentStartingPos);
+        pros::lcd::print(5, "Autons: 0: Normal top/bottom");
+        pros::lcd::print(6, "1: Normal left/right (clr -> right)");
+        pros::lcd::print(7, "2: SAWP top/bottom");
+        pros::lcd::print(8, "3: SAWP left/right, 4: skills");
+        pros::delay(20);
+    }
+}
+
 void initialize() {
     pros::lcd::initialize();
+    pros::Task LCD_update_task(updateLCD, nullptr, "LCD Update Task");
     initializeGlobals();
     intakeLift1.set_value(true);
-    intakeLift2.set_value(true);
     liftIntakePTO.set_value(false);
     endEffectorPiston.set_value(false);
     colorSorterPiston.set_value(false);
@@ -70,6 +89,7 @@ void opcontrol() {
     bool colorSorterPistonState = false;
     bool runningIntake = false;
     bool scoringPistonState = false;
+    bool runningIntakeForLift = false;
     float intakePower = 0.0;
     float liftPower = 0.0;
 
@@ -91,20 +111,23 @@ void opcontrol() {
             runningIntake = !runningIntake;
         }
 
-        if(runningIntake) {
+        if(runningIntake || runningIntakeForLift) {
             intakePower = 127;
         } else {
             intakePower = 0;
         }
 
         if(master.get_digital_new_press(DIGITAL_L1)) {
-            liftIntakePTOState = true;
+            liftIntakePTOState = false;
             liftPower = 127;
             intakePower = 127;
+            runningIntakeForLift = true;
         }
 
         if(master.get_digital_new_release(DIGITAL_L1)) {
-            liftIntakePTOState = false;
+            liftIntakePTOState = true;
+            pros::delay(50);
+            runningIntakeForLift = false;
         }
 
         bool wasRunningIntake = runningIntake;
@@ -112,11 +135,12 @@ void opcontrol() {
         if(master.get_digital_new_press(DIGITAL_L2)) {
             liftMotor.move(-127);
             if(!runningIntake) {
-                liftIntakePTOState = true;
+                liftIntakePTOState = false;
                 intakePower = -127;
             }
             if(master.get_digital_new_press(DIGITAL_R1)) {
-                liftIntakePTOState = false;
+                liftIntakePTOState = true;
+                pros::delay(50);
                 runningIntake = !runningIntake;
                 intakePower = 127;
             }
@@ -136,8 +160,7 @@ void opcontrol() {
 
         if(master.get_digital_new_press(DIGITAL_UP)) {
             endEffectorPiston.set_value(true);
-            intakeMotor1.move(127);
-            intakeMotor2.move(127);
+            intakeMotors.move(127);
             liftIntakePTO.set_value(true);
             liftMotor.move(127);
             scoringPiston.set_value(true);
@@ -147,8 +170,7 @@ void opcontrol() {
             pros::delay(800);
             liftMotor.move(0);
             if(!runningIntake) {
-                intakeMotor1.move(0);
-                intakeMotor2.move(0);
+                intakeMotors.move(0);
             }
         }
 
@@ -171,14 +193,14 @@ void opcontrol() {
         driveLeftMotors.move(std::clamp(forward + turn, -127, 127));
         driveRightMotors.move(std::clamp(forward - turn, -127, 127));
 
-        intakeMotor1.move(intakePower);
-        intakeMotor2.move(intakePower);
+        intakeMotors.move(intakePower);
         liftMotor.move(liftPower);
         intakeLift1.set_value(intakeLiftState);
-        intakeLift2.set_value(intakeLiftState);
         liftIntakePTO.set_value(liftIntakePTOState);
         endEffectorPiston.set_value(endEffectorState);
         colorSorterPiston.set_value(colorSorterPistonState);
         scoringPiston.set_value(scoringPistonState);
+
+        pros::delay(20);
     }
 }

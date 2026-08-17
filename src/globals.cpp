@@ -15,46 +15,46 @@ ControllerSettings angularSettings(2.5, 0.0, 17.0, 3.0, 1.0, 100.0, 3.0, 500.0, 
 
 // --- Motor Definitions ---
 pros::Controller master(pros::E_CONTROLLER_MASTER);
-pros::Motor intakeMotor1(1);
-pros::Motor intakeMotor2(1);
-pros::Motor liftMotor(1);
+pros::Motor intakeMotor1(-7, pros::MotorGears::blue);
+pros::Motor intakeMotor2(17, pros::MotorGears::blue);
+pros::Motor liftMotor(6, pros::MotorGears::blue);
 
 // --- Sensor Definitions ---
 pros::Imu imu(9);
-pros::Rotation verticalRotation(7);
-pros::Rotation horizontalRotation(8);
-pros::Distance intakeDetection(1);
-pros::Distance distanceSensor2(1);
-pros::Distance distanceSensor3(1);
-pros::Distance distanceSensor4(1);
-pros::Distance distanceSensor5(1);
-pros::Optical opticalSensor1(1);
-pros::Optical opticalSensor2(1);
+pros::Rotation verticalRotation(-4);
+pros::Rotation horizontalRotation(15);
+pros::Distance intakeDetection(3);
+pros::Distance distanceSensor2(8);
+pros::Distance distanceSensor3(9);
+pros::Distance distanceSensor4(10);
+pros::Distance distanceSensor5(13);
+pros::Optical opticalSensor1(18);
+pros::Optical opticalSensor2(19);
 
 // --- Pneumatic Definitions ---
-pros::adi::DigitalOut intakeLift1('A');
-pros::adi::DigitalOut intakeLift2('A');
-pros::adi::DigitalOut liftIntakePTO('A');
-pros::adi::DigitalOut endEffectorPiston('A');
-pros::adi::DigitalOut colorSorterPiston('A');
+pros::adi::DigitalOut intakeLift1('D');
+pros::adi::DigitalOut liftIntakePTO('E');
+pros::adi::DigitalOut endEffectorPiston('B');
 pros::adi::DigitalOut scoringPiston('A');
 
-pros::Motor leftMotor1(-1); pros::Motor leftMotor2(-2); pros::Motor leftMotor3(-3);
-pros::Motor rightMotor1(4); pros::Motor rightMotor2(5); pros::Motor rightMotor3(6);
+pros::Motor leftMotor1(-11, pros::MotorGears::blue); pros::Motor leftMotor2(-12, pros::MotorGears::blue); pros::Motor leftMotor3(-16, pros::MotorGears::blue);
+pros::Motor rightMotor1(1, pros::MotorGears::blue); pros::Motor rightMotor2(2, pros::MotorGears::blue); pros::Motor rightMotor3(5, pros::MotorGears::blue);
 
-pros::MotorGroup driveLeftMotors({-1, -2, -3});
-pros::MotorGroup driveRightMotors({4, 5, 6});
-pros::MotorGroup fullDrive({-1, -2, -3, 4, 5, 6});
+pros::MotorGroup driveLeftMotors({-11, -12, -16}, pros::MotorGears::blue);
+pros::MotorGroup driveRightMotors({1, 2, 5}, pros::MotorGears::blue);
+pros::MotorGroup fullDrive({-11, -12, -16, 1, 2, 5}, pros::MotorGears::blue);
+pros::MotorGroup intakeMotors({-7, 17}, pros::MotorGears::blue);
 
 constexpr double driveWheelDiameter = Omniwheel::NEW_275;
 constexpr double odomWheelDiameter = Omniwheel::NEW_2;
-constexpr double trackingWidth = 11.9;
+constexpr double trackingWidth = 11.92;
 
-int currentPage = 0;
-std::string allianceColor = "RED";
-bool controllerEnabled = true;
+//int currentPage = 0;
+//std::string allianceColor = "RED";
+//bool controllerEnabled = true;
 int currentStartingPos = 0;
 
+/*
 std::vector<std::vector<std::vector<double>>> autonPaths = {
     {{0,0},{20,10},{40,40},{60,20}},
     {{10,10},{30,50},{70,30},{90,10}},
@@ -65,6 +65,7 @@ std::vector<std::vector<std::vector<double>>> autonPaths = {
     {{10,90},{30,70},{50,90},{70,70}},
     {{0,40},{20,60},{40,20},{60,40}}
 };
+*/
 
 static TrackingWheel verticalWheel(&verticalRotation, odomWheelDiameter, 0);
 static TrackingWheel horizontalWheel(&horizontalRotation, odomWheelDiameter, -3.2);
@@ -86,4 +87,5 @@ void initializeGlobals() {
     imu.tare_rotation();
     verticalRotation.reset();
     horizontalRotation.reset();
+    liftMotor.set_brake_mode(pros::E_MOTOR_BRAKE_BRAKE);
 }
