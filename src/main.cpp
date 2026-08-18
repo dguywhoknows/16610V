@@ -9,6 +9,16 @@
 
 void on_center_button() {}
 
+bool intakeLiftState = true;
+bool liftIntakePTOState = false;
+bool endEffectorState = false;
+bool colorSorterPistonState = false;
+bool runningIntake = false;
+bool scoringPistonState = false;
+bool runningIntakeForLift = false;
+float intakePower = 0.0;
+float liftPower = 0.0;
+
 void updateLCD(void* param) {
     while(true) {
         int vertRaw = verticalRotation.get_position();
@@ -20,11 +30,27 @@ void updateLCD(void* param) {
         pros::lcd::print(2, "X: %.2f  Y: %.2f", pose.x, pose.y);
         pros::lcd::print(3, "Theta: %.1f deg", pose.theta);
         pros::lcd::print(4, "Starting Pos: %d", currentStartingPos);
-        pros::lcd::print(5, "Autons: 0: Normal top/bottom");
-        pros::lcd::print(6, "1: Normal left/right (clr -> right)");
-        pros::lcd::print(7, "2: SAWP top/bottom");
-        pros::lcd::print(8, "3: SAWP left/right, 4: skills");
+        pros::lcd::print(5, "0: Normal t/b (clr left), 1: Normal l/r");
+        pros::lcd::print(6, "2: SAWP t/b, 3: SAWP l/r");
+        pros::lcd::print(7, "4: line t/b, 5: line l/r, 6: skills");
         pros::delay(20);
+    }
+}
+
+void scoringMacro(void* param) {
+    endEffectorPiston.set_value(true);
+    intakeMotors.move(127);
+    liftIntakePTO.set_value(false);
+    liftMotor.move(127);
+    scoringPiston.set_value(false);
+    pros::delay(500);
+    liftIntakePTO.set_value(true);
+    liftMotor.move(-127);
+    pros::delay(800);
+    endEffectorPiston.set_value(false);
+    liftMotor.move(0);
+    if(!runningIntake) {
+        intakeMotors.move(0);
     }
 }
 
@@ -83,16 +109,6 @@ void autonomous() {
 }
 
 void opcontrol() {
-    bool intakeLiftState = true;
-    bool liftIntakePTOState = false;
-    bool endEffectorState = false;
-    bool colorSorterPistonState = false;
-    bool runningIntake = false;
-    bool scoringPistonState = false;
-    bool runningIntakeForLift = false;
-    float intakePower = 0.0;
-    float liftPower = 0.0;
-
     while (true) {
         int forward = master.get_analog(ANALOG_LEFT_Y);
         int turn = master.get_analog(ANALOG_RIGHT_X) * 0.85;
@@ -108,6 +124,9 @@ void opcontrol() {
         }
 
         if(master.get_digital_new_press(DIGITAL_R1)) {
+            if(!runningIntakeForLift) {
+                pros::delay(50);
+            }
             runningIntake = !runningIntake;
         }
 
@@ -126,7 +145,6 @@ void opcontrol() {
 
         if(master.get_digital_new_release(DIGITAL_L1)) {
             liftIntakePTOState = true;
-            pros::delay(50);
             runningIntakeForLift = false;
         }
 
@@ -140,7 +158,6 @@ void opcontrol() {
             }
             if(master.get_digital_new_press(DIGITAL_R1)) {
                 liftIntakePTOState = true;
-                pros::delay(50);
                 runningIntake = !runningIntake;
                 intakePower = 127;
             }
@@ -159,19 +176,7 @@ void opcontrol() {
         }
 
         if(master.get_digital_new_press(DIGITAL_UP)) {
-            endEffectorPiston.set_value(true);
-            intakeMotors.move(127);
-            liftIntakePTO.set_value(true);
-            liftMotor.move(127);
-            scoringPiston.set_value(true);
-            pros::delay(500);
-            liftIntakePTO.set_value(false);
-            liftMotor.move(-127);
-            pros::delay(800);
-            liftMotor.move(0);
-            if(!runningIntake) {
-                intakeMotors.move(0);
-            }
+            pros::Task scoringMacroTask(scoringMacro, nullptr, "Scoring Macro Task");
         }
 
         if(master.get_digital_new_press(DIGITAL_X)) {
