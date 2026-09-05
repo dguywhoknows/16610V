@@ -1,6 +1,29 @@
 #include "distSensorUtil.hpp"
+#include "globals.hpp"
 #include <cmath>
 #include <algorithm>
+
+// front and back face along the robot's y axis, left and right along x. The
+// offset x/y come from the mounting measurements; theta is the world-relative
+// facing when the robot heading is zero.
+DistTaskParams wallResetParams = {
+    {
+        {&distFront, lemlib::Pose(-4.552, 2.661,   0)},
+        {&distBack,  lemlib::Pose( 4.552, 4.999, 180)},
+        {&distLeft,  lemlib::Pose( 5.874, 3.036, 270)},
+        {&distRight, lemlib::Pose(-5.902, 3.036,  90)},
+    },
+    {true, true, true, true},
+    &chassis,
+};
+
+void resetPoseFromWalls(bool front, bool back, bool left, bool right) {
+    wallResetParams.use_sensor[0] = front;
+    wallResetParams.use_sensor[1] = back;
+    wallResetParams.use_sensor[2] = left;
+    wallResetParams.use_sensor[3] = right;
+    correctPoseFromDistSensors(&wallResetParams);
+}
 
 // Corrects the robot pose from up to four distance sensors ranging off the field
 // walls. The field is 144 inches square, so each wall is at +/- 72 from center.

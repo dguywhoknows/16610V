@@ -28,6 +28,15 @@ struct DistTaskParams {
 // couple inches, snaps the pose x and/or y to match. Heading is left alone.
 void correctPoseFromDistSensors(DistTaskParams* params);
 
+// The four perimeter sensors and their mounting offsets, ready to hand to
+// correctPoseFromDistSensors. use_sensor index order is {front, back, left, right}.
+extern DistTaskParams wallResetParams;
+
+// Enable the chosen sensors, then run one correction pass. Any sensor that cannot
+// see its wall this cycle is ignored, so passing a sensor that is pointed across
+// the field is harmless.
+void resetPoseFromWalls(bool front, bool back, bool left, bool right);
+
 /*
 // Parked alternative: a full Monte Carlo localization implementation that fuses
 // the same distance sensors against a wall model. Left here for reference.

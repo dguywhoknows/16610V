@@ -31,6 +31,12 @@ pros::Rotation verticalRotation(-6);
 pros::Rotation horizontalRotation(15);
 pros::Distance intakeDetection(14);
 
+// Wall-ranging distance sensors. TODO: set these to the real ports.
+pros::Distance distFront(2);
+pros::Distance distBack(3);
+pros::Distance distLeft(4);
+pros::Distance distRight(9);
+
 pros::adi::DigitalOut intakeLift1('D');
 pros::adi::DigitalOut endEffectorPiston('B');
 pros::adi::DigitalOut scoringPiston('A');

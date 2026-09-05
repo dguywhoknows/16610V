@@ -36,6 +36,13 @@ extern pros::Rotation verticalRotation;
 extern pros::Rotation horizontalRotation;
 extern pros::Distance intakeDetection; // sees a pin and cup enter the intake during matchloading
 
+// Perimeter distance sensors, one per side, used to reset odometry off the field
+// walls. Offsets and enable flags live in distSensorUtil.
+extern pros::Distance distFront;
+extern pros::Distance distBack;
+extern pros::Distance distLeft;
+extern pros::Distance distRight;
+
 // Pneumatics.
 extern pros::adi::DigitalOut intakeLift1;       // raises and drops the intake / matchload arm
 extern pros::adi::DigitalOut endEffectorPiston; // claw open / closed
