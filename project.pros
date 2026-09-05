@@ -1,7 +1,7 @@
 {
   "py/object": "pros.conductor.project.Project",
   "py/state": {
-    "project_name": "16610V (FAH)",
+    "project_name": "override bot 1 (dev)",
     "target": "v5",
     "templates": {
       "LemLib": {
@@ -635,8 +635,9 @@
       }
     },
     "upload_options": {
-      "description": "heh FAH",
-      "icon": "clawbot"
+      "description": "FAH",
+      "icon": "clawbot",
+      "slot": 2
     },
     "use_early_access": false
   }

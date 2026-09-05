@@ -1,5 +1,6 @@
 #include "main.h"
 #include <algorithm>
+#include <cmath>
 #include "globals.hpp"
 #include "paths.hpp"
 #include "lemlib/chassis/chassis.hpp"
@@ -7,20 +8,196 @@
 #include "pros/motors.hpp"
 #include "distSensorUtil.hpp"
 
+// Called when the brain's center button is pressed. Nothing bound to it.
 void on_center_button() {}
 
-bool intakeLiftState = true;
-bool liftIntakePTOState = false;
-bool endEffectorState = false;
-bool colorSorterPistonState = false;
-bool runningIntake = false;
-bool scoringPistonState = false;
-bool runningIntakeForLift = false;
-float intakePower = 0.0;
-float liftPower = 0.0;
+bool intakeLiftState = true;   // true = intake arm raised, false = dropped
+float intakePower = 0.0;       // voltage currently commanded to the intake
+bool runningIntake = false;    // whether the driver has the intake toggled on
 
+// The scoring routine is a small state machine. Each press of L1 arms it or bumps
+// the target height up a pin; the "score" button drops the stack; the machine then
+// clears the wrist, lowers, and re-zeroes the lift before going back to idle.
+enum class ScoreState {
+    IDLE,
+    CLAMP_DELAY,               // claw just clamped, let it settle
+    RAISE_TO_WRIST_CLEAR,      // lift up to the height where the wrist can swing out
+    WRIST_EXTEND_DELAY,        // wait for the wrist to finish extending
+    MOVE_TO_SETPOINT,          // drive the lift to the selected pin height
+    AT_SETPOINT,               // holding at height, waiting for the score command
+    SCORE_RELEASE_DELAY,       // claw opened, let the stack drop clear
+    SCORE_RAISE_CLEAR,         // lift a bit more so the claw clears the stack
+    SCORE_WAIT_FORWARD,        // near max height instead: drive forward to clear
+    SCORE_RETRACT_WRIST,       // pull the wrist back in
+    SCORE_WRIST_RETRACT_DELAY, // wait for the wrist to finish retracting
+    SCORE_LOWER_RESET          // drive the lift back down and re-zero it
+};
+
+ScoreState scoreState = ScoreState::IDLE;
+int setpointIndex = 0;                                  // which entry in LIFT_SETPOINTS_IN we are aiming for
+double scoreTargetHeight = LIFT_SETPOINTS_IN[0];        // working target height, in inches
+bool sequenceStarted = false;                           // true while the scoring routine owns the lift
+bool scorePending = false;                              // set by the score button, consumed at AT_SETPOINT
+uint32_t scoreStateStartTime = 0;                       // millis() when the current state began, for timed waits
+double forwardStartPos = 0;                             // vertical encoder reading when SCORE_WAIT_FORWARD started
+ScoreState afterReleaseState = ScoreState::SCORE_RAISE_CLEAR; // where to go after the claw release delay
+
+// True while the scoring routine is running, so opcontrol leaves the lift and
+// intake alone.
+bool isScoringModeActive() {
+    return sequenceStarted;
+}
+
+// L1: arm the routine if it is not running, otherwise step the target up one pin.
+void handleL1Press() {
+    if (!sequenceStarted) {
+        sequenceStarted = true;
+        setpointIndex = 0;
+        endEffectorPiston.set_value(true);
+        scoreStateStartTime = pros::millis();
+        scoreState = ScoreState::CLAMP_DELAY;
+    } else if (setpointIndex < NUM_LIFT_SETPOINTS - 1) {
+        setpointIndex++;
+    }
+}
+
+// L2: step the target down one pin (only while the routine is running).
+void handleL2Press() {
+    if (!sequenceStarted) return;
+    if (setpointIndex > 0) {
+        setpointIndex--;
+    }
+}
+
+// Score button: ask the state machine to release the stack at the next chance.
+void handleScorePress() {
+    if (!sequenceStarted) return;
+    scorePending = true;
+}
+
+// Background task that advances the scoring state machine every 10 ms.
+void scoringTaskLoop(void* param) {
+    while (true) {
+        uint32_t now = pros::millis();
+
+        switch (scoreState) {
+        case ScoreState::IDLE:
+            elevator.move(0);
+            break;
+
+        case ScoreState::CLAMP_DELAY:
+            if (now - scoreStateStartTime >= CLAMP_DELAY_MS) {
+                scoreState = ScoreState::RAISE_TO_WRIST_CLEAR;
+            }
+            break;
+
+        case ScoreState::RAISE_TO_WRIST_CLEAR:
+            driveLiftTowards(WRIST_CLEAR_HEIGHT_IN);
+            if (liftSettledAt(WRIST_CLEAR_HEIGHT_IN)) {
+                scoringPiston.set_value(true);
+                scoreStateStartTime = now;
+                scoreState = ScoreState::WRIST_EXTEND_DELAY;
+            }
+            break;
+
+        case ScoreState::WRIST_EXTEND_DELAY:
+            elevator.move(0);
+            if (now - scoreStateStartTime >= WRIST_EXTEND_DELAY_MS) {
+                scoreState = ScoreState::MOVE_TO_SETPOINT;
+            }
+            break;
+
+        case ScoreState::MOVE_TO_SETPOINT:
+            scoreTargetHeight = LIFT_SETPOINTS_IN[setpointIndex];
+            driveLiftTowards(scoreTargetHeight);
+            if (liftSettledAt(scoreTargetHeight)) {
+                scoreState = ScoreState::AT_SETPOINT;
+            }
+            break;
+
+        case ScoreState::AT_SETPOINT:
+            // The driver may still be bumping the target up or down, so re-check
+            // that we are actually at the current setpoint before holding.
+            if (!liftSettledAt(LIFT_SETPOINTS_IN[setpointIndex])) {
+                scoreState = ScoreState::MOVE_TO_SETPOINT;
+                break;
+            }
+            elevator.move(0);
+            if (scorePending) {
+                scorePending = false;
+                endEffectorPiston.set_value(false);
+                scoreStateStartTime = now;
+                // If lifting further would exceed the max height, drive the robot
+                // forward to clear the stack instead.
+                if (getLiftHeightInches() + SCORE_RAISE_DELTA_IN > MAX_LIFT_HEIGHT_IN) {
+                    afterReleaseState = ScoreState::SCORE_WAIT_FORWARD;
+                } else {
+                    afterReleaseState = ScoreState::SCORE_RAISE_CLEAR;
+                }
+                scoreState = ScoreState::SCORE_RELEASE_DELAY;
+            }
+            break;
+
+        case ScoreState::SCORE_RELEASE_DELAY:
+            elevator.move(0);
+            if (now - scoreStateStartTime >= CLAW_RELEASE_DELAY_MS) {
+                if (afterReleaseState == ScoreState::SCORE_RAISE_CLEAR) {
+                    scoreTargetHeight = getLiftHeightInches() + SCORE_RAISE_DELTA_IN;
+                } else {
+                    forwardStartPos = verticalRotation.get_position();
+                }
+                scoreState = afterReleaseState;
+            }
+            break;
+
+        case ScoreState::SCORE_RAISE_CLEAR:
+            driveLiftTowards(scoreTargetHeight);
+            if (liftSettledAt(scoreTargetHeight)) {
+                scoreState = ScoreState::SCORE_RETRACT_WRIST;
+            }
+            break;
+
+        case ScoreState::SCORE_WAIT_FORWARD: {
+            // Encoder counts to inches: the Rotation sensor reports centidegrees.
+            double degreesTravelled = std::fabs(verticalRotation.get_position() - forwardStartPos) / 100.0;
+            double inchesTravelled = (degreesTravelled / 360.0) * (M_PI * 2.0);
+            if (inchesTravelled >= FORWARD_CLEAR_DISTANCE_IN) {
+                scoreState = ScoreState::SCORE_RETRACT_WRIST;
+            }
+            break;
+        }
+
+        case ScoreState::SCORE_RETRACT_WRIST:
+            scoringPiston.set_value(false);
+            scoreStateStartTime = now;
+            scoreState = ScoreState::SCORE_WRIST_RETRACT_DELAY;
+            break;
+
+        case ScoreState::SCORE_WRIST_RETRACT_DELAY:
+            elevator.move(0);
+            if (now - scoreStateStartTime >= WRIST_RETRACT_DELAY_MS) {
+                scoreState = ScoreState::SCORE_LOWER_RESET;
+            }
+            break;
+
+        case ScoreState::SCORE_LOWER_RESET:
+            resetLiftToBottom();
+            elevator.move(0);
+            // Routine is done, hand the lift and intake back to the driver.
+            sequenceStarted = false;
+            scorePending = false;
+            setpointIndex = 0;
+            scoreState = ScoreState::IDLE;
+            break;
+        }
+
+        pros::delay(10);
+    }
+}
+
+// Background task that prints odometry and sensor values to the brain screen.
 void updateLCD(void* param) {
-    while(true) {
+    while (true) {
         int vertRaw = verticalRotation.get_position();
         int horzRaw = horizontalRotation.get_position();
         double imuDeg = imu.get_heading();
@@ -37,174 +214,95 @@ void updateLCD(void* param) {
     }
 }
 
-void scoringMacro(void* param) {
-    endEffectorPiston.set_value(true);
-    intakeMotors.move(127);
-    liftIntakePTO.set_value(false);
-    liftMotor.move(127);
-    scoringPiston.set_value(false);
-    pros::delay(500);
-    liftIntakePTO.set_value(true);
-    liftMotor.move(-127);
-    pros::delay(800);
-    endEffectorPiston.set_value(false);
-    liftMotor.move(0);
-    if(!runningIntake) {
-        intakeMotors.move(0);
-    }
-}
-
+// Runs once when the program starts.
 void initialize() {
     pros::lcd::initialize();
     pros::Task LCD_update_task(updateLCD, nullptr, "LCD Update Task");
     initializeGlobals();
+
+    elevator.set_brake_mode_all(pros::E_MOTOR_BRAKE_HOLD);
+    elevator.tare_position_all();
+
+    // Start with the intake arm up and both scoring pistons retracted.
     intakeLift1.set_value(true);
-    liftIntakePTO.set_value(false);
     endEffectorPiston.set_value(false);
-    colorSorterPiston.set_value(false);
     scoringPiston.set_value(false);
-/*
-    pros::Task mclTask([]{
-        pros::delay(2000);
-
-        std::vector<dist_sensor> mcl_sensors = {
-            {distanceSensor1, lemlib::Pose(0, 5, 0)},
-            {distanceSensor2, lemlib::Pose(-5, 0, 270)},
-            {distanceSensor3, lemlib::Pose(5, 0, 90)}
-        };
-
-        lemlib::Pose lastPose = chassis.getPose();
-        mcl_init(lastPose);
-
-        const int delay_ms = 20;
-
-        while (true) {
-            lemlib::Pose currentPose = chassis.getPose();
-
-            double dx = currentPose.x - lastPose.x;
-            double dy = currentPose.y - lastPose.y;
-            double dtheta = currentPose.theta - lastPose.theta;
-
-            double distance_moved = sqrt((dx * dx) + (dy * dy));
-            double current_speed = distance_moved / (delay_ms / 1000.0);
-
-            mcl_update(dx, dy, dtheta);
-            mcl_sense(mcl_sensors);
-
-            lemlib::Pose fusedPose = mcl_get_fused_pose(currentPose, current_speed);
-            chassis.setPose(fusedPose.x, fusedPose.y, fusedPose.theta);
-
-            lastPose = chassis.getPose();
-            pros::delay(delay_ms);
-        }
-    });
-    */
 }
 
 void disabled() {}
 void competition_initialize() {}
 
+// Field-control autonomous period: run whichever path is selected.
 void autonomous() {
     Paths::runAutonomous();
 }
 
+// Driver control period.
 void opcontrol() {
+    pros::Task scoringTask(scoringTaskLoop, nullptr, "Scoring Task");
+
     while (true) {
         int forward = master.get_analog(ANALOG_LEFT_Y);
-        int turn = master.get_analog(ANALOG_RIGHT_X) * 0.85;
+        int turn = master.get_analog(ANALOG_RIGHT_X) * 0.85; // scale turning down a little
 
+        // Joystick deadband so the robot sits still when the sticks are centered.
         if (abs(forward) < 20) forward = 0;
         if (abs(turn) < 20) turn = 0;
 
-        if(master.get_digital_new_press(DIGITAL_R2)) {
-            intakeLiftState = false;
+        if (master.get_digital_new_press(DIGITAL_B)) {
+            handleScorePress();
         }
-        if(master.get_digital_new_release(DIGITAL_R2)) {
+
+        if (master.get_digital_new_press(DIGITAL_L1)) {
+            handleL1Press();
+        }
+
+        if (master.get_digital_new_press(DIGITAL_L2)) {
+            handleL2Press();
+        }
+
+        // R2: drop the intake arm and start intaking.
+        if (master.get_digital_new_press(DIGITAL_R2) && !isScoringModeActive()) {
+            intakeLiftState = false;
+            runningIntake = true;
+        }
+
+        if (intakeDetection.get() < 290 && intakeLiftState) {
             intakeLiftState = true;
         }
 
-        if(master.get_digital_new_press(DIGITAL_R1)) {
-            if(!runningIntakeForLift) {
-                pros::delay(50);
-            }
+        // R1: toggle the intake on and off.
+        if (master.get_digital_new_press(DIGITAL_R1) && !isScoringModeActive()) {
             runningIntake = !runningIntake;
         }
 
-        if(runningIntake || runningIntakeForLift) {
-            intakePower = 127;
-        } else {
-            intakePower = 0;
-        }
-
-        if(master.get_digital_new_press(DIGITAL_L1)) {
-            liftIntakePTOState = false;
-            liftPower = 127;
-            intakePower = 127;
-            runningIntakeForLift = true;
-        }
-
-        if(master.get_digital_new_release(DIGITAL_L1)) {
-            liftIntakePTOState = true;
-            runningIntakeForLift = false;
-        }
-
-        bool wasRunningIntake = runningIntake;
-
-        if(master.get_digital_new_press(DIGITAL_L2)) {
-            liftMotor.move(-127);
-            if(!runningIntake) {
-                liftIntakePTOState = false;
-                intakePower = -127;
-            }
-            if(master.get_digital_new_press(DIGITAL_R1)) {
-                liftIntakePTOState = true;
-                runningIntake = !runningIntake;
-                intakePower = 127;
-            }
-        }
-
-        if(master.get_digital_new_release(DIGITAL_L2) && !wasRunningIntake) {
-            liftIntakePTOState = false;
-        }
-
-        if(master.get_digital_new_press(DIGITAL_B)) {
-            endEffectorState = true;
-        }
-        
-        if(master.get_digital_new_press(DIGITAL_DOWN)) {
-            endEffectorState = false;
-        }
-
-        if(master.get_digital_new_press(DIGITAL_UP)) {
-            pros::Task scoringMacroTask(scoringMacro, nullptr, "Scoring Macro Task");
-        }
-
-        if(master.get_digital_new_press(DIGITAL_X)) {
-            scoringPistonState = !scoringPistonState;
-        }
-
-        if(master.get_digital_new_press(DIGITAL_LEFT) && currentStartingPos > 0) {
+        // D-pad left/right scrolls through the auton starting positions.
+        if (master.get_digital_new_press(DIGITAL_LEFT) && currentStartingPos > 0) {
             currentStartingPos -= 1;
         }
 
-        if(master.get_digital_new_press(DIGITAL_RIGHT) && currentStartingPos < 3) {
+        if (master.get_digital_new_press(DIGITAL_RIGHT) && currentStartingPos < 6) {
             currentStartingPos += 1;
         }
 
+        // Y: re-run the selected auton (handy for testing).
         if (master.get_digital_new_press(DIGITAL_Y)) {
             Paths::runAutonomous();
         }
 
+        if (!isScoringModeActive()) {
+            intakePower = runningIntake ? 127 : 0;
+        }
+
+        // Arcade drive.
         driveLeftMotors.move(std::clamp(forward + turn, -127, 127));
         driveRightMotors.move(std::clamp(forward - turn, -127, 127));
 
-        intakeMotors.move(intakePower);
-        liftMotor.move(liftPower);
+        if (!isScoringModeActive()) {
+            intake.move(intakePower);
+        }
+
         intakeLift1.set_value(intakeLiftState);
-        liftIntakePTO.set_value(liftIntakePTOState);
-        endEffectorPiston.set_value(endEffectorState);
-        colorSorterPiston.set_value(colorSorterPistonState);
-        scoringPiston.set_value(scoringPistonState);
 
         pros::delay(20);
     }

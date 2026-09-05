@@ -1,58 +1,53 @@
+#include "globals.hpp"
 #include "lemlib/chassis/chassis.hpp"
 #include "pros/motors.hpp"
 #include <vector>
 #include <string>
+#include <cmath>
 #include "pros/adi.hpp"
 #include "pros/imu.hpp"
 #include "pros/distance.hpp"
 #include "pros/optical.hpp"
+#include "pros/rtos.hpp"
 
 using namespace lemlib;
 
-// --- Controller Settings (Definitions) --- TUNE THE PID ITS NOT TUNED YET, https://lemlib.readthedocs.io/en/stable/tutorials/4_pid_tuning.html
-ControllerSettings lateralSettings(7.0, 0.1, 8.0, 3.0, 1.0, 100.0, 3.0, 500.0, 0.0);
-ControllerSettings angularSettings(2.5, 0.0, 17.0, 3.0, 1.0, 100.0, 3.0, 500.0, 0.0);
+// Drive PID gains. Order is kP, kI, kD, anti-windup, small-error range, small-error
+// timeout, large-error range, large-error timeout, slew.
+ControllerSettings lateralSettings(20.0, 0.0, 17.0, 3.0, 0.75, 100.0, 2.0, 500.0, 0.0);
+ControllerSettings angularSettings(6.0, 0.0, 21.0, 3.0, 1.0, 100.0, 3.0, 500.0, 0.0);
 
-// --- Motor Definitions ---
 pros::Controller master(pros::E_CONTROLLER_MASTER);
-pros::Motor intakeMotor1(-7, pros::MotorGears::blue);
-pros::Motor intakeMotor2(17, pros::MotorGears::blue);
-pros::Motor liftMotor(6, pros::MotorGears::blue);
 
-// --- Sensor Definitions ---
-pros::Imu imu(9);
-pros::Rotation verticalRotation(-4);
+// Single intake motor on port 11, reversed.
+pros::Motor intake(-11, pros::MotorGears::blue);
+
+// Lift runs on three motors (ports 5, 8, and 19). Ports 5 and 8 are reversed so
+// all three pull the lift the same direction.
+pros::MotorGroup elevator({-5, -8, 19}, pros::MotorGears::blue);
+
+pros::Imu imu(17);
+pros::Rotation verticalRotation(-6);
 pros::Rotation horizontalRotation(15);
-pros::Distance intakeDetection(3);
-pros::Distance distanceSensor2(8);
-pros::Distance distanceSensor3(9);
-pros::Distance distanceSensor4(10);
-pros::Distance distanceSensor5(13);
-pros::Optical opticalSensor1(18);
-pros::Optical opticalSensor2(19);
+pros::Distance intakeDetection(14);
 
-// --- Pneumatic Definitions ---
 pros::adi::DigitalOut intakeLift1('D');
-pros::adi::DigitalOut liftIntakePTO('E');
 pros::adi::DigitalOut endEffectorPiston('B');
 pros::adi::DigitalOut scoringPiston('A');
 
-pros::Motor leftMotor1(-11, pros::MotorGears::blue); pros::Motor leftMotor2(-12, pros::MotorGears::blue); pros::Motor leftMotor3(-16, pros::MotorGears::blue);
-pros::Motor rightMotor1(1, pros::MotorGears::blue); pros::Motor rightMotor2(2, pros::MotorGears::blue); pros::Motor rightMotor3(5, pros::MotorGears::blue);
+// Left side on ports 12 and 16 (reversed), right side on ports 1 and 7.
+pros::MotorGroup driveLeftMotors({-12, -16}, pros::MotorGears::blue);
+pros::MotorGroup driveRightMotors({1, 7}, pros::MotorGears::blue);
+pros::MotorGroup fullDrive({-12, -16, 1, 7}, pros::MotorGears::blue);
 
-pros::MotorGroup driveLeftMotors({-11, -12, -16}, pros::MotorGears::blue);
-pros::MotorGroup driveRightMotors({1, 2, 5}, pros::MotorGears::blue);
-pros::MotorGroup fullDrive({-11, -12, -16, 1, 2, 5}, pros::MotorGears::blue);
-pros::MotorGroup intakeMotors({-7, 17}, pros::MotorGears::blue);
-
-constexpr double driveWheelDiameter = Omniwheel::NEW_275;
-constexpr double odomWheelDiameter = Omniwheel::NEW_2;
-constexpr double trackingWidth = 11.92;
+constexpr double driveWheelDiameter = Omniwheel::NEW_275; // 2.75" drive wheels
+constexpr double odomWheelDiameter = Omniwheel::NEW_2;    // 2" tracking wheels
+constexpr double trackingWidth = 11.92;                   // distance between the left and right wheels
 
 //int currentPage = 0;
 //std::string allianceColor = "RED";
 //bool controllerEnabled = true;
-int currentStartingPos = 0;
+int currentStartingPos = 3;
 
 /*
 std::vector<std::vector<std::vector<double>>> autonPaths = {
@@ -67,9 +62,11 @@ std::vector<std::vector<std::vector<double>>> autonPaths = {
 };
 */
 
+// Tracking wheels. The horizontal wheel sits 3.2" behind the tracking center.
 static TrackingWheel verticalWheel(&verticalRotation, odomWheelDiameter, 0);
 static TrackingWheel horizontalWheel(&horizontalRotation, odomWheelDiameter, -3.2);
 
+// Odometry uses one vertical and one horizontal tracking wheel plus the IMU.
 static OdomSensors sensors(&verticalWheel, nullptr, &horizontalWheel, nullptr, &imu);
 static Drivetrain drivetrain(&driveLeftMotors, &driveRightMotors, trackingWidth, driveWheelDiameter, 450.0, 2.0);
 
@@ -87,5 +84,63 @@ void initializeGlobals() {
     imu.tare_rotation();
     verticalRotation.reset();
     horizontalRotation.reset();
-    liftMotor.set_brake_mode(pros::E_MOTOR_BRAKE_BRAKE);
+    // Hold brake keeps the lift from sagging under its own weight.
+    elevator.set_brake_mode_all(pros::E_MOTOR_BRAKE_BRAKE);
+}
+
+// Converts the lift encoder reading into a height in inches above the floor.
+double getLiftHeightInches() {
+    double rotations = elevator.get_position() / 360.0;
+    return MIN_LIFT_HEIGHT_IN + rotations * LIFT_INCHES_PER_ROTATION;
+}
+
+// True when the lift is within the tolerance band of the requested height.
+bool liftSettledAt(double inches) {
+    return std::fabs(getLiftHeightInches() - inches) <= LIFT_POSITION_TOLERANCE_IN;
+}
+
+// Bang-bang control: full power up or down until we are inside the tolerance band,
+// then coast. Call this repeatedly in a loop.
+void driveLiftTowards(double inches) {
+    double error = inches - getLiftHeightInches();
+    double power = 0;
+    if (error > LIFT_POSITION_TOLERANCE_IN) {
+        power = LIFT_DRIVE_POWER;
+    } else if (error < -LIFT_POSITION_TOLERANCE_IN) {
+        power = -LIFT_DRIVE_POWER;
+    }
+    elevator.move(power);
+}
+
+// Timestamp of when the lift first looked stalled, or 0 if it currently does not.
+static uint32_t liftStallConditionStartTime = 0;
+
+// The lift is "stalled" once its efficiency has sat near zero for long enough,
+// which means it is pushing against the bottom hard stop.
+bool liftIsStalled() {
+    bool conditionMet = std::fabs(elevator.get_efficiency()) <= LIFT_STALL_EFFICIENCY_THRESHOLD;
+
+    if (!conditionMet) {
+        liftStallConditionStartTime = 0;
+        return false;
+    }
+
+    if (liftStallConditionStartTime == 0) {
+        liftStallConditionStartTime = pros::millis();
+        return false;
+    }
+
+    return (pros::millis() - liftStallConditionStartTime) >= LIFT_STALL_DEBOUNCE_MS;
+}
+
+// Drives the lift down until it stalls on the hard stop, then zeroes the encoder
+// so the next height reading starts from a known point.
+void resetLiftToBottom() {
+    liftStallConditionStartTime = 0;
+    while (!liftIsStalled()) {
+        elevator.move(LIFT_RESET_DOWN_POWER);
+        pros::delay(10);
+    }
+    elevator.move(0);
+    elevator.tare_position_all();
 }

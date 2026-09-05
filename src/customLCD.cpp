@@ -1,3 +1,10 @@
+// Implementation of the brain screen UI declared in customLCD.hpp. Draws each
+// page, handles touch input, and drives the motor test and PID tuning tools.
+// Kept in a block comment until the globals it needs are wired back up. Note that
+// the motor test page still lists three motors per drive side and a set of spare
+// sensors that no longer exist on the robot, so that table needs a pass before
+// this is turned back on.
+
 /*
 #include "customLCD.hpp"   // header, declares Button class, initUI(), updateUI()
 #include "globals.hpp"     // access to all hardware objects: chassis, motors, sensors, PID settings
@@ -335,7 +342,7 @@ static void drawSensorsPage() {
     pros::screen::print(pros::E_TEXT_MEDIUM, 3,  ("IMU: "         + std::to_string(imu.get_rotation())).c_str());              // IMU cumulative rotation in degrees
     pros::screen::print(pros::E_TEXT_MEDIUM, 4,  ("Vert Rot: "    + std::to_string(verticalRotation.get_position())).c_str());  // vertical tracking wheel encoder position
     pros::screen::print(pros::E_TEXT_MEDIUM, 5,  ("Horiz Rot: "   + std::to_string(horizontalRotation.get_position())).c_str());// horizontal tracking wheel encoder position
-    pros::screen::print(pros::E_TEXT_MEDIUM, 6,  ("Lift Sensor: " + std::to_string(liftSensor.get_position())).c_str());        // lift encoder position
+    pros::screen::print(pros::E_TEXT_MEDIUM, 6,  ("Lift Sensor: " + std::to_string(liftMotor.get_position())).c_str());        // lift encoder position
     pros::screen::print(pros::E_TEXT_MEDIUM, 7,  ("Dist1: "       + std::to_string(distanceSensor1.get())).c_str());            // distance sensor 1 reading in mm
     pros::screen::print(pros::E_TEXT_MEDIUM, 8,  ("Dist2: "       + std::to_string(distanceSensor2.get())).c_str());            // distance sensor 2
     pros::screen::print(pros::E_TEXT_MEDIUM, 9,  ("Dist3: "       + std::to_string(distanceSensor3.get())).c_str());            // distance sensor 3
@@ -511,10 +518,10 @@ static void processTouches(const pros::screen_touch_status_s_t& touch, const Hom
 
         // LOG buttons, print current PID values to the screen for debugging
         if (touch.x > 90 && touch.x < 180 && touch.y > 50 && touch.y < 75) { // log lateral PID
-            pros::screen::print(pros::E_TEXT_SMALL, 15, ("Lateral | Lift: " + std::to_string(liftSensor.get_position()) + " | kP:" + std::to_string(lateralSettings.kP) + " | kI:" + std::to_string(lateralSettings.kI) + " | kD:" + std::to_string(lateralSettings.kD) + " | Slew:" + std::to_string(lateralSettings.slew)).c_str());
+            pros::screen::print(pros::E_TEXT_SMALL, 15, ("Lateral | Lift: " + std::to_string(liftMotor.get_position()) + " | kP:" + std::to_string(lateralSettings.kP) + " | kI:" + std::to_string(lateralSettings.kI) + " | kD:" + std::to_string(lateralSettings.kD) + " | Slew:" + std::to_string(lateralSettings.slew)).c_str());
         }
         if (touch.x > 330 && touch.x < 420 && touch.y > 50 && touch.y < 75) { // log angular PID
-            pros::screen::print(pros::E_TEXT_SMALL, 16, ("Angular | Lift: " + std::to_string(liftSensor.get_position()) + " | kP:" + std::to_string(angularSettings.kP) + " | kI:" + std::to_string(angularSettings.kI) + " | kD:" + std::to_string(angularSettings.kD) + " | Slew:" + std::to_string(angularSettings.slew)).c_str());
+            pros::screen::print(pros::E_TEXT_SMALL, 16, ("Angular | Lift: " + std::to_string(liftMotor.get_position()) + " | kP:" + std::to_string(angularSettings.kP) + " | kI:" + std::to_string(angularSettings.kI) + " | kD:" + std::to_string(angularSettings.kD) + " | Slew:" + std::to_string(angularSettings.slew)).c_str());
         }
 
         // RESET buttons, restore original PID values
@@ -561,7 +568,7 @@ static void processTouches(const pros::screen_touch_status_s_t& touch, const Hom
         if (touch.x > 320 && touch.x < 440 && touch.y > 50  && touch.y < 70)  imu.reset();                // reset IMU heading and rotation
         if (touch.x > 320 && touch.x < 440 && touch.y > 80  && touch.y < 100) verticalRotation.reset();   // reset vertical tracking wheel
         if (touch.x > 320 && touch.x < 440 && touch.y > 110 && touch.y < 130) horizontalRotation.reset(); // reset horizontal tracking wheel
-        if (touch.x > 320 && touch.x < 440 && touch.y > 140 && touch.y < 160) liftSensor.reset();         // reset lift encoder
+        if (touch.x > 320 && touch.x < 440 && touch.y > 140 && touch.y < 160) liftMotor.tare_position();  // reset lift encoder
     }
 }
 
