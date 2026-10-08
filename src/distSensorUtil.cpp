@@ -2,463 +2,286 @@
 #include "globals.hpp"
 #include <cmath>
 #include <algorithm>
+#include <random>
 
-// front and back face along the robot's y axis, left and right along x. The
-// offset x/y come from the mounting measurements; theta is the world-relative
-// facing when the robot heading is zero.
 DistTaskParams wallResetParams = {
     {
-        {&distFront, lemlib::Pose(-4.552, 2.661,   0)},
-        {&distBack,  lemlib::Pose( 4.552, 4.999, 180)},
-        {&distLeft,  lemlib::Pose( 5.874, 3.036, 270)},
-        {&distRight, lemlib::Pose(-5.902, 3.036,  90)},
+        {&distBack,  lemlib::Pose(-4.375, -2.875, 180)},
+        {&distLeft,  lemlib::Pose(-5.875, -1,     270)},
+        {&distRight, lemlib::Pose( 5.875, -1,      90)},
     },
-    {true, true, true, true},
+    {true, true, true},
     &chassis,
 };
 
-void resetPoseFromWalls(bool front, bool back, bool left, bool right) {
-    wallResetParams.use_sensor[0] = front;
-    wallResetParams.use_sensor[1] = back;
-    wallResetParams.use_sensor[2] = left;
-    wallResetParams.use_sensor[3] = right;
+void resetPoseFromWalls(bool back, bool left, bool right) {
+    wallResetParams.use_sensor[0] = back;
+    wallResetParams.use_sensor[1] = left;
+    wallResetParams.use_sensor[2] = right;
     correctPoseFromDistSensors(&wallResetParams);
 }
 
-// Corrects the robot pose from up to four distance sensors ranging off the field
-// walls. The field is 144 inches square, so each wall is at +/- 72 from center.
 void correctPoseFromDistSensors(DistTaskParams* params) {
     if (params == nullptr || params->chassis == nullptr) return;
 
-    lemlib::Pose currentPose = params->chassis->getPose(true);
-    double rad = currentPose.theta; // pose theta is already in radians here
+    double wall_dist = 72;
+    double correct_rate = 10;
 
-    // Accumulate wall based position estimates so we can average them.
-    double sum_x = 0, sum_y = 0;
-    int valid_x_readings = 0, valid_y_readings = 0;
+    lemlib::Pose currentPos = params->chassis->getPose(true);
 
-    int sensorCount = std::min<int>(4, params->sensors.size());
+    int sensorCount = std::min<int>(3, params->sensors.size());
     for (int i = 0; i < sensorCount; i++) {
         if (!params->use_sensor[i] || params->sensors[i].sensor == nullptr) continue;
 
         auto& s = params->sensors[i];
-        int dist_mm = s.sensor->get();
-        // Skip out of range, zero, or low confidence readings.
-        if (dist_mm == 9999 || dist_mm == 0 || s.sensor->get_confidence() < 60) continue;
+        int32_t sensorValue = s.sensor->get();
+        if (sensorValue == 9999 || sensorValue <= 0) continue;
 
-        double dist_in = dist_mm * 0.0393701; // mm to inches
-        double s_rad = rad + s.offset.theta * M_PI / 180.0; // world direction the sensor points
+        double distanceValue = sensorValue * 0.0393701;
 
-        double ray_dx = sin(s_rad);
-        double ray_dy = cos(s_rad);
+        double offset_y = -s.offset.x * sin(currentPos.theta) + s.offset.y * cos(currentPos.theta);
+        double offset_x = s.offset.x * cos(currentPos.theta) + s.offset.y * sin(currentPos.theta);
 
-        // Whichever axis the ray points along most is the wall it is seeing.
-        if (std::abs(ray_dx) > std::abs(ray_dy)) {
-            double actual_wall_x = (ray_dx > 0) ? 72.0 : -72.0;
-            // Back out where the robot must be for this reading to hit that wall,
-            // removing the sensor mounting offset.
-            double calculated_robot_x = actual_wall_x - (dist_in * ray_dx) - (s.offset.x * cos(rad) + s.offset.y * sin(rad));
-            sum_x += calculated_robot_x;
-            valid_x_readings++;
+        double s_rad = currentPos.theta + s.offset.theta * M_PI / 180;
+        double x_value = distanceValue * sin(s_rad) + offset_x;
+        double y_value = distanceValue * cos(s_rad) + offset_y;
+
+        double ray_x = sin(s_rad);
+        double ray_y = cos(s_rad);
+        double hit_x_wall = std::abs(ray_x) > 1e-6 ? ((ray_x > 0 ? wall_dist : -wall_dist) - (currentPos.x + offset_x)) / ray_x : 1e9;
+        double hit_y_wall = std::abs(ray_y) > 1e-6 ? ((ray_y > 0 ? wall_dist : -wall_dist) - (currentPos.y + offset_y)) / ray_y : 1e9;
+
+        if (hit_x_wall < hit_y_wall) {
+            x_value = (ray_x > 0 ? wall_dist : -wall_dist) - x_value;
+            if (std::abs(x_value - currentPos.x) < correct_rate) {
+                params->chassis->setPose(x_value, currentPos.y, currentPos.theta, true);
+                currentPos = params->chassis->getPose(true);
+            }
         } else {
-            double actual_wall_y = (ray_dy > 0) ? 72.0 : -72.0;
-            double calculated_robot_y = actual_wall_y - (dist_in * ray_dy) - (s.offset.y * cos(rad) - s.offset.x * sin(rad));
-            sum_y += calculated_robot_y;
-            valid_y_readings++;
+            y_value = (ray_y > 0 ? wall_dist : -wall_dist) - y_value;
+            if (std::abs(y_value - currentPos.y) < correct_rate) {
+                params->chassis->setPose(currentPos.x, y_value, currentPos.theta, true);
+                currentPos = params->chassis->getPose(true);
+            }
         }
-    }
-
-    double final_x = currentPose.x;
-    double final_y = currentPose.y;
-    bool should_set_pose = false;
-
-    // Only override an axis if the walls disagree with odometry by more than 2
-    // inches, so sensor noise does not constantly jitter the pose.
-    if (valid_x_readings > 0) {
-        double avg_x = sum_x / valid_x_readings;
-        if (std::abs(avg_x - currentPose.x) > 2.0) {
-            final_x = avg_x;
-            should_set_pose = true;
-        }
-    }
-
-    if (valid_y_readings > 0) {
-        double avg_y = sum_y / valid_y_readings;
-        if (std::abs(avg_y - currentPose.y) > 2.0) {
-            final_y = avg_y;
-            should_set_pose = true;
-        }
-    }
-
-    if (should_set_pose) {
-        params->chassis->setPose(final_x, final_y, currentPose.theta, true);
     }
 }
 
 /*
-#include "globals.hpp"        
-#include <cmath>              
-#include <iostream>           
-#include <algorithm>          
-#include <random>             
+bool mclEnabled = false;
 
-static std::vector<Particle> particles; 
+struct MCLParticle {
+    double x;
+    double y;
+    double theta;
+    double weight;
+};
 
-static const double mcl_stdev = 3.0; 
+struct MCLReading {
+    double inches;
+    lemlib::Pose offset;
+};
 
-static std::mt19937 gen(std::random_device{}()); 
+static constexpr int mclNumParticles = 300;
+static constexpr double mclWallDist = 72.0;
+static constexpr double mclSensorStdev = 3.0;
+static constexpr double mclBaseNoise = 0.3;
+static constexpr double mclTravelNoise = 0.05;
+static constexpr double mclHeadingNoise = 0.03;
+static constexpr double mclInitSpread = 3.0;
+static constexpr double mclLikelihoodFloor = 0.001;
+static constexpr double mclMinMatch = 0.05;
+static constexpr double mclGateIn = 10.0;
+static constexpr double mclMinIncidence = 0.7;
+static constexpr double mclResetJumpIn = 8.0;
+static constexpr double mclMinBlend = 0.1;
+static constexpr double mclMaxBlend = 0.85;
+static constexpr int32_t mclMaxRangeMm = 2000;
+static constexpr int32_t mclMinObjectSize = 70;
+static constexpr uint32_t mclPeriodMs = 50;
+static constexpr double mclStoppedTravelIn = 0.25;
+static constexpr double mclMinCorrectionIn = 0.3;
+static constexpr double mclMaxCorrectionIn = 2.0;
 
-static double w_slow = 0.0; 
-static double w_fast = 0.0; 
+static std::vector<MCLParticle> mclParticles;
+static std::mt19937 mclGen(pros::micros());
+static lemlib::Pose mclLastPose(0, 0, 0);
+static double mclConfidence = 0;
 
-static const double alpha_slow = 0.05; 
-static const double alpha_fast = 0.2;  
+static double mclExpectedDistance(double x, double y, double theta, const lemlib::Pose& offset, double& incidence) {
+    double sx = x + offset.x * cos(theta) + offset.y * sin(theta);
+    double sy = y - offset.x * sin(theta) + offset.y * cos(theta);
+    double rayRad = theta + offset.theta * M_PI / 180.0;
+    double dx = sin(rayRad);
+    double dy = cos(rayRad);
 
-bool correct_position(dist_sensor sensor, lemlib::Chassis *chassis, bool is_x_wall, bool forced, double correct_rate) {
-    lemlib::Pose currentPos = chassis->getPose(true); 
-    int32_t sensorValue = sensor.sensor.get(); 
-
-    if (sensorValue == 9999 || sensorValue == 0) { 
-        std::cout << "distance value invalid, not correcting position" << std::endl; 
-        return false; 
-    }
-
-    double distanceValue = sensorValue * 0.0393701; 
-    double rad = currentPos.theta * M_PI / 180.0; 
-
-    double offset_x = sensor.offset.x * cos(rad) + sensor.offset.y * sin(rad); 
-    double offset_y = -sensor.offset.x * sin(rad) + sensor.offset.y * cos(rad); 
-
-    double s_rad = (currentPos.theta + sensor.offset.theta) * M_PI / 180.0; 
-
-    double wall_x = currentPos.x + offset_x + distanceValue * sin(s_rad); 
-    double wall_y = currentPos.y + offset_y + distanceValue * cos(s_rad); 
-
-    if (is_x_wall) { 
-        double actual_wall = (wall_x > 0) ? 72.0 : -72.0; 
-        double corrected_x = actual_wall - (offset_x + distanceValue * sin(s_rad)); 
-
-        if (std::abs(corrected_x - currentPos.x) < correct_rate || forced) { 
-            std::cout << "Corrected Pose X: " << corrected_x << std::endl;
-            chassis->setPose(corrected_x, currentPos.y, currentPos.theta, true); 
-            return true;
-        }
-    } else { 
-        double actual_wall = (wall_y > 0) ? 72.0 : -72.0; 
-        double corrected_y = actual_wall - (offset_y + distanceValue * cos(s_rad)); 
-
-        if (std::abs(corrected_y - currentPos.y) < correct_rate || forced) {
-            std::cout << "Corrected Pose Y: " << corrected_y << std::endl;
-            chassis->setPose(currentPos.x, corrected_y, currentPos.theta, true); 
-            return true;
-        }
-    }
-
-    return false; 
-}
-
-double get_expected_distance(lemlib::Pose p, lemlib::Pose offset, double& out_incidence_cos) {
-    double rad = p.theta * M_PI / 180.0; 
-    double global_s_x = p.x + offset.x * cos(rad) + offset.y * sin(rad); 
-    double global_s_y = p.y - offset.x * sin(rad) + offset.y * cos(rad); 
-    double s_rad = (p.theta + offset.theta) * M_PI / 180.0; 
-
-    double ray_dx = sin(s_rad); 
-    double ray_dy = cos(s_rad); 
-
-    double min_dist = 9999;         
-    double norm_x = 0, norm_y = 0; 
-
-    if (std::abs(ray_dx) > 0.0001) { 
-        double d = ((ray_dx > 0 ? 72.0 : -72.0) - global_s_x) / ray_dx; 
-        if (d > 0 && d < min_dist) { 
-            min_dist = d;
-            norm_x = (ray_dx > 0) ? -1.0 : 1.0; 
-            norm_y = 0.0;
+    double best = 1e9;
+    incidence = 0;
+    if (std::abs(dx) > 1e-6) {
+        double t = ((dx > 0 ? mclWallDist : -mclWallDist) - sx) / dx;
+        if (t > 0 && t < best) {
+            best = t;
+            incidence = std::abs(dx);
         }
     }
-
-    if (std::abs(ray_dy) > 0.0001) { 
-        double d = ((ray_dy > 0 ? 72.0 : -72.0) - global_s_y) / ray_dy; 
-        if (d > 0 && d < min_dist) {
-            min_dist = d;
-            norm_x = 0.0;
-            norm_y = (ray_dy > 0) ? -1.0 : 1.0; 
+    if (std::abs(dy) > 1e-6) {
+        double t = ((dy > 0 ? mclWallDist : -mclWallDist) - sy) / dy;
+        if (t > 0 && t < best) {
+            best = t;
+            incidence = std::abs(dy);
         }
     }
-
-    out_incidence_cos = std::abs(ray_dx * norm_x + ray_dy * norm_y); 
-    return min_dist; 
+    return best;
 }
 
-double compute_weight(double expected, double measured, double stdev) {
-    double error = measured - expected; 
-    return exp(-(error * error) / (2.0 * stdev * stdev)); 
+static void mclResetParticles(const lemlib::Pose& pose) {
+    std::uniform_real_distribution<double> spread(-mclInitSpread, mclInitSpread);
+    mclParticles.resize(mclNumParticles);
+    for (auto& p : mclParticles) {
+        p.x = pose.x + spread(mclGen);
+        p.y = pose.y + spread(mclGen);
+        p.theta = pose.theta;
+        p.weight = 1.0 / mclNumParticles;
+    }
+    mclLastPose = pose;
+    mclConfidence = 0;
 }
 
-void mcl_init(lemlib::Pose initial_pose, int num_particles) {
-    particles.clear();
-    particles.resize(num_particles); 
+static void mclStep() {
+    lemlib::Pose pose = chassis.getPose(true);
+    double dx = pose.x - mclLastPose.x;
+    double dy = pose.y - mclLastPose.y;
+    double travel = std::hypot(dx, dy);
 
-    std::uniform_real_distribution<double> dist_xy(-4.0, 4.0);    
-    std::uniform_real_distribution<double> dist_theta(-2.0, 2.0); 
+    if (mclParticles.empty() || travel > mclResetJumpIn) {
+        mclResetParticles(pose);
+        return;
+    }
+    mclLastPose = pose;
 
-    for (int i = 0; i < num_particles; i++) {
-        particles[i].pose = lemlib::Pose(
-            initial_pose.x     + dist_xy(gen),   
-            initial_pose.y     + dist_xy(gen),   
-            initial_pose.theta + dist_theta(gen) 
-        );
-        particles[i].weight = 1.0 / num_particles; 
+    std::vector<MCLReading> readings;
+    for (auto& s : wallResetParams.sensors) {
+        if (s.sensor == nullptr) continue;
+        int32_t raw = s.sensor->get_distance();
+        if (raw <= 0 || raw >= mclMaxRangeMm || s.sensor->get_object_size() <= mclMinObjectSize) continue;
+
+        double inches = raw * 0.0393701;
+        double incidence;
+        double expected = mclExpectedDistance(pose.x, pose.y, pose.theta, s.offset, incidence);
+        if (incidence < mclMinIncidence || std::abs(inches - expected) > mclGateIn) continue;
+
+        readings.push_back({inches, s.offset});
     }
 
-    w_slow = 0.0; 
-    w_fast = 0.0;
-}
+    if (readings.empty()) {
+        for (auto& p : mclParticles) {
+            p.x += dx;
+            p.y += dy;
+            p.theta = pose.theta;
+        }
+        mclConfidence = 0;
+        return;
+    }
 
-void mcl_update(double local_dx, double local_dy, double dtheta) {
-    double travel_dist = std::sqrt(local_dx * local_dx + local_dy * local_dy); 
+    std::normal_distribution<double> posNoise(0.0, mclBaseNoise + mclTravelNoise * travel);
+    std::normal_distribution<double> headingNoise(0.0, mclHeadingNoise);
+    for (auto& p : mclParticles) {
+        p.x += dx + posNoise(mclGen);
+        p.y += dy + posNoise(mclGen);
+        p.theta = pose.theta + headingNoise(mclGen);
+    }
 
-    std::normal_distribution<double> dist_pos(0.0, 0.05 * travel_dist + 0.005); 
-    std::normal_distribution<double> dist_rot(0.0, 0.02 * std::abs(dtheta) + 0.001); 
+    double inv2Var = 1.0 / (2.0 * mclSensorStdev * mclSensorStdev);
+    double totalWeight = 0;
+    double bestWeight = 0;
+    for (auto& p : mclParticles) {
+        double likelihood = 1.0;
+        for (auto& r : readings) {
+            double incidence;
+            double error = r.inches - mclExpectedDistance(p.x, p.y, p.theta, r.offset, incidence);
+            likelihood *= std::max(mclLikelihoodFloor, exp(-error * error * inv2Var));
+        }
+        p.weight = likelihood;
+        totalWeight += likelihood;
+        bestWeight = std::max(bestWeight, likelihood);
+    }
 
-    for (auto& p : particles) {
-        double rad = p.pose.theta * M_PI / 180.0; 
-        double global_dx = local_dy * sin(rad) + local_dx * cos(rad); 
-        double global_dy = local_dy * cos(rad) - local_dx * sin(rad); 
+    if (totalWeight <= 0 || pow(bestWeight, 1.0 / readings.size()) < mclMinMatch) {
+        for (auto& p : mclParticles) p.weight = 1.0 / mclNumParticles;
+        mclConfidence = 0;
+        return;
+    }
 
-        p.pose.x += global_dx + dist_pos(gen); 
-        p.pose.y += global_dy + dist_pos(gen); 
+    double meanX = 0;
+    double meanY = 0;
+    double sumSquares = 0;
+    for (auto& p : mclParticles) {
+        p.weight /= totalWeight;
+        meanX += p.x * p.weight;
+        meanY += p.y * p.weight;
+        sumSquares += p.weight * p.weight;
+    }
 
-        p.pose.theta += dtheta + dist_rot(gen);        
-        p.pose.theta = std::fmod(p.pose.theta, 360.0); 
-        if (p.pose.theta < 0) p.pose.theta += 360.0;   
+    double essRatio = (1.0 / sumSquares) / mclNumParticles;
+    mclConfidence = 0.8 * essRatio + 0.2 * mclConfidence;
+    double blend = std::clamp(mclConfidence, mclMinBlend, mclMaxBlend);
+
+    std::vector<MCLParticle> resampled;
+    resampled.reserve(mclNumParticles);
+    double step = 1.0 / mclNumParticles;
+    std::uniform_real_distribution<double> startDist(0.0, step);
+    double u = startDist(mclGen);
+    double cumulative = mclParticles[0].weight;
+    int i = 0;
+    for (int m = 0; m < mclNumParticles; m++) {
+        while (u > cumulative && i < mclNumParticles - 1) {
+            i++;
+            cumulative += mclParticles[i].weight;
+        }
+        MCLParticle p = mclParticles[i];
+        p.weight = step;
+        resampled.push_back(p);
+        u += step;
+    }
+    mclParticles = std::move(resampled);
+
+    double correctionX = blend * (meanX - pose.x);
+    double correctionY = blend * (meanY - pose.y);
+    double correction = std::hypot(correctionX, correctionY);
+    if (chassis.isInMotion() || travel > mclStoppedTravelIn || correction < mclMinCorrectionIn) return;
+    if (correction > mclMaxCorrectionIn) {
+        correctionX *= mclMaxCorrectionIn / correction;
+        correctionY *= mclMaxCorrectionIn / correction;
+    }
+
+    pros::Task self = pros::Task::current();
+    uint32_t oldPriority = self.get_priority();
+    self.set_priority(TASK_PRIORITY_MAX - 1);
+    lemlib::Pose now = chassis.getPose(true);
+    if (chassis.isInMotion() || std::hypot(now.x - pose.x, now.y - pose.y) > mclStoppedTravelIn) {
+        self.set_priority(oldPriority);
+        return;
+    }
+    chassis.setPose(now.x + correctionX, now.y + correctionY, now.theta, true);
+    mclLastPose = chassis.getPose(true);
+    self.set_priority(oldPriority);
+
+    double lagX = now.x - pose.x;
+    double lagY = now.y - pose.y;
+    for (auto& p : mclParticles) {
+        p.x += lagX;
+        p.y += lagY;
     }
 }
 
-void mcl_sense(std::vector<dist_sensor>& sensors) {
-    if (particles.empty()) return;
-
-    std::vector<double> readings; 
-    for (auto& s : sensors) {
-        int val = s.sensor.get(); 
-        if (val == 9999 || val == 0 || s.sensor.get_confidence() < 60) { 
-            readings.push_back(-1);
+void mclTaskLoop(void* param) {
+    while (true) {
+        if (mclEnabled) {
+            mclStep();
         } else {
-            readings.push_back(val * 0.0393701); 
+            mclParticles.clear();
         }
+        pros::delay(mclPeriodMs);
     }
-
-    std::vector<double> sensor_max_weights(sensors.size(), 0.0); 
-    std::vector<std::vector<double>> particle_sensor_weights( 
-        particles.size(), std::vector<double>(sensors.size(), 1.0)
-    );
-
-    int active_sensors = 0;
-
-    for (size_t p_idx = 0; p_idx < particles.size(); p_idx++) {
-        for (size_t s_idx = 0; s_idx < sensors.size(); s_idx++) {
-            if (readings[s_idx] < 0) { 
-                particle_sensor_weights[p_idx][s_idx] = -1.0;
-                continue;
-            }
-
-            double incidence_cos = 1.0;
-            double expected = get_expected_distance(particles[p_idx].pose, sensors[s_idx].offset, incidence_cos);
-
-            if (incidence_cos < 0.707) { 
-                particle_sensor_weights[p_idx][s_idx] = -1.0;
-                continue;
-            }
-
-            double weight = compute_weight(expected, readings[s_idx], mcl_stdev); 
-            particle_sensor_weights[p_idx][s_idx] = weight;
-
-            if (weight > sensor_max_weights[s_idx]) sensor_max_weights[s_idx] = weight; 
-        }
-    }
-
-    std::vector<bool> use_sensor(sensors.size(), true);
-    double outlier_threshold = 0.05; 
-
-    for (size_t s_idx = 0; s_idx < sensors.size(); s_idx++) {
-        if (readings[s_idx] >= 0) {
-            if (sensor_max_weights[s_idx] < outlier_threshold) {
-                use_sensor[s_idx] = false; 
-            } else {
-                active_sensors++;
-            }
-        }
-    }
-
-    double total_weight = 0;
-
-    for (size_t p_idx = 0; p_idx < particles.size(); p_idx++) {
-        double p_weight_sum = 0.0;
-        int valid_sensor_count = 0;
-
-        for (size_t s_idx = 0; s_idx < sensors.size(); s_idx++) {
-            if (readings[s_idx] >= 0 && use_sensor[s_idx] && particle_sensor_weights[p_idx][s_idx] >= 0) {
-                p_weight_sum += particle_sensor_weights[p_idx][s_idx]; 
-                valid_sensor_count++;
-            }
-        }
-
-        particles[p_idx].weight = (valid_sensor_count > 0)
-            ? (p_weight_sum / valid_sensor_count) 
-            : (1.0 / particles.size());           
-
-        total_weight += particles[p_idx].weight;
-    }
-
-    if (total_weight > 0) {
-        double avg_weight = total_weight / particles.size(); 
-
-        for (auto& p : particles) p.weight /= total_weight; 
-
-        if (active_sensors > 0) {
-            if (w_slow == 0.0) w_slow = avg_weight; else w_slow += alpha_slow * (avg_weight - w_slow); 
-            if (w_fast == 0.0) w_fast = avg_weight; else w_fast += alpha_fast * (avg_weight - w_fast); 
-        }
-
-        double random_particle_prob = std::max(0.0, 1.0 - (w_fast / w_slow));
-
-        std::vector<Particle> new_particles;
-        new_particles.reserve(particles.size());
-
-        int N = particles.size();
-        double M_inv = 1.0 / N; 
-
-        std::uniform_real_distribution<double> uni_dist(0.0, M_inv);
-        std::uniform_real_distribution<double> rand_prob_dist(0.0, 1.0);
-        std::uniform_real_distribution<double> field_x(-72.0, 72.0);    
-        std::uniform_real_distribution<double> field_y(-72.0, 72.0);    
-        std::uniform_real_distribution<double> field_theta(0.0, 360.0); 
-
-        double r = uni_dist(gen);       
-        double c = particles[0].weight; 
-        int i = 0;                      
-
-        for (int m = 0; m < N; m++) {
-            if (rand_prob_dist(gen) < random_particle_prob && active_sensors > 0) {
-                Particle rand_p;
-                rand_p.pose = lemlib::Pose(field_x(gen), field_y(gen), field_theta(gen));
-                rand_p.weight = M_inv;
-                new_particles.push_back(rand_p);
-            } else {
-                double U = r + m * M_inv; 
-
-                while (U > c && i < N - 1) { 
-                    i++;
-                    c += particles[i].weight;
-                }
-
-                Particle sampled = particles[i];
-                sampled.weight = M_inv; 
-                new_particles.push_back(sampled);
-            }
-        }
-
-        particles = std::move(new_particles); 
-
-    } else {
-        double uniform_w = 1.0 / particles.size();
-        for (auto& p : particles) p.weight = uniform_w;
-    }
-}
-
-lemlib::Pose mcl_get_estimated_pose() {
-    if (particles.empty()) return lemlib::Pose(0, 0, 0);
-
-    double sum_x = 0, sum_y = 0;
-    double sum_sin = 0, sum_cos = 0; 
-    double total_w = 0;
-
-    for (auto& p : particles) {
-        sum_x   += p.pose.x * p.weight;
-        sum_y   += p.pose.y * p.weight;
-        sum_sin += sin(p.pose.theta * M_PI / 180.0) * p.weight; 
-        sum_cos += cos(p.pose.theta * M_PI / 180.0) * p.weight; 
-        total_w += p.weight;
-    }
-
-    if (total_w < 0.00001) { 
-        double n = particles.size();
-        double sx = 0, sy = 0, s_sin = 0, s_cos = 0;
-        for (auto& p : particles) {
-            sx += p.pose.x; sy += p.pose.y;
-            s_sin += sin(p.pose.theta * M_PI / 180.0);
-            s_cos += cos(p.pose.theta * M_PI / 180.0);
-        }
-        double avg_theta = atan2(s_sin, s_cos) * 180.0 / M_PI;
-        if (avg_theta < 0) avg_theta += 360.0;
-        return lemlib::Pose(sx / n, sy / n, avg_theta);
-    }
-
-    double avg_x = sum_x / total_w;
-    double avg_y = sum_y / total_w;
-    double avg_theta = atan2(sum_sin, sum_cos) * 180.0 / M_PI; 
-    if (avg_theta < 0) avg_theta += 360.0; 
-
-    return lemlib::Pose(avg_x, avg_y, avg_theta);
-}
-
-void mcl_sync_with_chassis(lemlib::Chassis *chassis, double current_speed) {
-    if (particles.empty()) return;
-
-    lemlib::Pose mcl_pose = mcl_get_estimated_pose();
-
-    double var_spatial = 0;
-    for (const auto& p : particles) {
-        double dx = p.pose.x - mcl_pose.x;
-        double dy = p.pose.y - mcl_pose.y;
-        var_spatial += (dx * dx + dy * dy); 
-    }
-    var_spatial /= particles.size(); 
-
-    if (current_speed < 3.0 && var_spatial < 1.5 && w_fast > 0.1) {
-        chassis->setPose(mcl_pose.x, mcl_pose.y, mcl_pose.theta, true);
-    }
-}
-
-lemlib::Pose mcl_get_fused_pose(lemlib::Pose odom_pose, double current_speed) {
-    if (particles.empty()) return odom_pose;
-
-    lemlib::Pose mcl_pose = mcl_get_estimated_pose();
-
-    double var_spatial = 0;
-    for (const auto& p : particles) {
-        double dx = p.pose.x - mcl_pose.x;
-        double dy = p.pose.y - mcl_pose.y;
-        var_spatial += (dx * dx + dy * dy);
-    }
-    var_spatial /= particles.size();
-
-    double blend_factor = 0.0; 
-
-    if (w_fast > 0.1) { 
-        const double MAX_BLEND = 0.15; 
-        double speed_scale = 1.0 - (std::abs(current_speed) / 5.0); 
-        speed_scale = std::clamp(speed_scale, 0.0, 1.0);
-
-        double variance_scale = 1.0 - (var_spatial / 2.0); 
-        variance_scale = std::clamp(variance_scale, 0.0, 1.0);
-
-        blend_factor = MAX_BLEND * speed_scale * variance_scale; 
-    }
-
-    double fused_x = odom_pose.x + blend_factor * (mcl_pose.x - odom_pose.x); 
-    double fused_y = odom_pose.y + blend_factor * (mcl_pose.y - odom_pose.y); 
-
-    double odom_rad = odom_pose.theta * M_PI / 180.0;
-    double mcl_rad  = mcl_pose.theta  * M_PI / 180.0;
-
-    double fused_sin = sin(odom_rad) + blend_factor * (sin(mcl_rad) - sin(odom_rad)); 
-    double fused_cos = cos(odom_rad) + blend_factor * (cos(mcl_rad) - cos(odom_rad)); 
-
-    double fused_theta = atan2(fused_sin, fused_cos) * 180.0 / M_PI; 
-    if (fused_theta < 0) fused_theta += 360.0; 
-
-    return lemlib::Pose(fused_x, fused_y, fused_theta);
 }
 */

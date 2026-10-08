@@ -2,37 +2,34 @@
 #include "paths.hpp"
 #include "distSensorUtil.hpp"
 #include "lemlib/chassis/chassis.hpp"
+#include "liblvgl/widgets/label/lv_label.h"
 #include "pros/rtos.hpp"
 #include <algorithm>
 #include <math.h>
 #include <cmath>
 
 namespace Paths {
-    void intakeDropTask(void* param) {
+    void clampTask(void* param) {
         int theDelay = *static_cast<int*>(param);
         pros::delay(theDelay);
-        intakeLift1.set_value(false);
         endEffectorPiston.set_value(true);
+    }
+
+    void lowerLiftTask(void* param) {
+        int theDelay = *static_cast<int*>(param);
+        pros::delay(theDelay);
+        resetLiftToBottom();
     }
 
     double heightForPins(int pins) {
         int index = pins - 1;
         if (index < 0) index = 0;
-        if (index > NUM_LIFT_SETPOINTS - 1) index = NUM_LIFT_SETPOINTS - 1;
-        return LIFT_SETPOINTS_IN[index];
+        if (index > numLiftSetpoints - 1) index = numLiftSetpoints - 1;
+        return liftSetpointsIn[index];
     }
 
     void raiseForPins(int pins) {
         double targetHeight = heightForPins(pins);
-
-        while (!liftSettledAt(WRIST_CLEAR_HEIGHT_IN)) {
-            driveLiftTowards(WRIST_CLEAR_HEIGHT_IN);
-            pros::delay(10);
-        }
-        elevator.move(0);
-
-        scoringPiston.set_value(true);
-        pros::delay(WRIST_EXTEND_DELAY_MS);
 
         while (!liftSettledAt(targetHeight)) {
             driveLiftTowards(targetHeight);
@@ -46,9 +43,30 @@ namespace Paths {
         raiseForPins(pins);
     }
 
+    void goToSetpoint(int setpoint) {
+        double targetHeight = heightForPins(setpoint);
+
+        while (!liftSettledAt(targetHeight)) {
+            driveLiftTowards(targetHeight);
+            pros::delay(10);
+        }
+        elevator.move(0);
+    }
+
+    struct SetpointTaskParams {
+        int setpoint;
+        int delay;
+    };
+
+    void goToSetpointTask(void* param) {
+        SetpointTaskParams* params = static_cast<SetpointTaskParams*>(param);
+        pros::delay(params->delay);
+        goToSetpoint(params->setpoint);
+    }
+
     void scoreAtGoal() {
         endEffectorPiston.set_value(false);
-        pros::delay(CLAW_RELEASE_DELAY_MS);
+        pros::delay(clawReleaseDelayMs);
     }
 
     struct RetractParams {
@@ -59,25 +77,22 @@ namespace Paths {
         RetractParams* params = static_cast<RetractParams*>(param);
 
         double currentHeight = getLiftHeightInches();
-        if (currentHeight + SCORE_RAISE_DELTA_IN > MAX_LIFT_HEIGHT_IN) {
+        if (currentHeight + scoreRaiseDeltaIn > maxLiftHeightIn) {
             double startPos = verticalRotation.get_position();
             double inchesTravelled = 0;
-            while (inchesTravelled < FORWARD_CLEAR_DISTANCE_IN) {
+            while (inchesTravelled < forwardClearDistanceIn) {
                 double degreesTravelled = std::fabs(verticalRotation.get_position() - startPos) / 100.0;
                 inchesTravelled = (degreesTravelled / 360.0) * (M_PI * 2.0);
                 pros::delay(10);
             }
         } else {
-            double clearTarget = currentHeight + SCORE_RAISE_DELTA_IN;
+            double clearTarget = currentHeight + scoreRaiseDeltaIn;
             while (!liftSettledAt(clearTarget)) {
                 driveLiftTowards(clearTarget);
                 pros::delay(10);
             }
             elevator.move(0);
         }
-
-        scoringPiston.set_value(false);
-        pros::delay(WRIST_RETRACT_DELAY_MS);
 
         resetLiftToBottom();
         elevator.move(0);
@@ -87,608 +102,693 @@ namespace Paths {
         }
     }
 
+    
+/*
+    struct TrajectoryPoint {
+        double x;
+        double y;
+        double heading;
+        double curvature;
+        double dist;
+        double vel;
+        double time;
+    };
+
+    constexpr double ramseteB = 2.0 / (39.37 * 39.37);
+    constexpr double ramseteZeta = 0.7;
+    constexpr double ramseteMaxAccel = 90.0;
+    constexpr double ramseteMaxLateralAccel = 70.0;
+    constexpr double ramseteTrackWidth = 11.92;
+    constexpr double ramseteWheelDiameter = 2.75;
+    constexpr double ramseteWheelRpm = 450.0;
+    constexpr double ramseteMotorRpm = 600.0;
+    constexpr double ramseteMaxVel = ramseteWheelRpm / 60.0 * M_PI * ramseteWheelDiameter;
+    constexpr int ramseteSamplesPerSegment = 100;
+    constexpr uint32_t ramseteLoopMs = 10;
+
+    struct HermiteSegment {
+        double p0x, p0y, t0x, t0y, p1x, p1y, t1x, t1y;
+    };
+
+    void sampleHermite(const HermiteSegment& seg, double u, double& x, double& y, double& dx, double& dy, double& ddx, double& ddy) {
+        double u2 = u * u;
+        double u3 = u2 * u;
+
+        double h00 = 2 * u3 - 3 * u2 + 1;
+        double h10 = u3 - 2 * u2 + u;
+        double h01 = -2 * u3 + 3 * u2;
+        double h11 = u3 - u2;
+
+        double d00 = 6 * u2 - 6 * u;
+        double d10 = 3 * u2 - 4 * u + 1;
+        double d01 = -6 * u2 + 6 * u;
+        double d11 = 3 * u2 - 2 * u;
+
+        double dd00 = 12 * u - 6;
+        double dd10 = 6 * u - 4;
+        double dd01 = -12 * u + 6;
+        double dd11 = 6 * u - 2;
+
+        x = h00 * seg.p0x + h10 * seg.t0x + h01 * seg.p1x + h11 * seg.t1x;
+        y = h00 * seg.p0y + h10 * seg.t0y + h01 * seg.p1y + h11 * seg.t1y;
+        dx = d00 * seg.p0x + d10 * seg.t0x + d01 * seg.p1x + d11 * seg.t1x;
+        dy = d00 * seg.p0y + d10 * seg.t0y + d01 * seg.p1y + d11 * seg.t1y;
+        ddx = dd00 * seg.p0x + dd10 * seg.t0x + dd01 * seg.p1x + dd11 * seg.t1x;
+        ddy = dd00 * seg.p0y + dd10 * seg.t0y + dd01 * seg.p1y + dd11 * seg.t1y;
+    }
+
+    std::vector<TrajectoryPoint> generateCurveTrajectory(double x1, double y1, double x2, double y2, bool forwards, double maxSpeed) {
+        lemlib::Pose start = chassis.getPose(true, true);
+        double facing = forwards ? start.theta : start.theta + M_PI;
+
+        double len0 = std::hypot(x1 - start.x, y1 - start.y);
+        double len1 = std::hypot(x2 - x1, y2 - y1);
+
+        double dir0x = len0 > 1e-6 ? (x1 - start.x) / len0 : cos(facing);
+        double dir0y = len0 > 1e-6 ? (y1 - start.y) / len0 : sin(facing);
+        double dir1x = len1 > 1e-6 ? (x2 - x1) / len1 : dir0x;
+        double dir1y = len1 > 1e-6 ? (y2 - y1) / len1 : dir0y;
+
+        double midx = dir0x + dir1x;
+        double midy = dir0y + dir1y;
+        double midLen = std::hypot(midx, midy);
+        if (midLen < 1e-6) {
+            midx = dir1x;
+            midy = dir1y;
+        } else {
+            midx /= midLen;
+            midy /= midLen;
+        }
+
+        HermiteSegment segments[2] = {
+            {start.x, start.y, cos(facing) * len0, sin(facing) * len0, x1, y1, midx * len0, midy * len0},
+            {x1, y1, midx * len1, midy * len1, x2, y2, dir1x * len1, dir1y * len1},
+        };
+
+        std::vector<TrajectoryPoint> traj;
+        traj.reserve(2 * ramseteSamplesPerSegment + 1);
+        for (int s = 0; s < 2; s++) {
+            for (int i = (s == 0 ? 0 : 1); i <= ramseteSamplesPerSegment; i++) {
+                double u = static_cast<double>(i) / ramseteSamplesPerSegment;
+                double x, y, dx, dy, ddx, ddy;
+                sampleHermite(segments[s], u, x, y, dx, dy, ddx, ddy);
+
+                double speedSq = dx * dx + dy * dy;
+                double curvature = speedSq > 1e-9 ? (dx * ddy - dy * ddx) / std::pow(speedSq, 1.5) : 0;
+                double heading = speedSq > 1e-9 ? atan2(dy, dx) : (traj.empty() ? facing : traj.back().heading);
+
+                double dist = 0;
+                if (!traj.empty()) dist = traj.back().dist + std::hypot(x - traj.back().x, y - traj.back().y);
+
+                traj.push_back({x, y, heading, curvature, dist, 0, 0});
+            }
+        }
+
+        double maxVel = ramseteMaxVel * std::clamp(maxSpeed, 0.0, 127.0) / 127.0;
+        for (auto& p : traj) {
+            double k = std::abs(p.curvature);
+            double wheelLimit = maxVel / (1.0 + k * ramseteTrackWidth / 2.0);
+            double lateralLimit = k > 1e-6 ? std::sqrt(ramseteMaxLateralAccel / k) : maxVel;
+            p.vel = std::min({maxVel, wheelLimit, lateralLimit});
+        }
+
+        traj.front().vel = 0;
+        for (size_t i = 1; i < traj.size(); i++) {
+            double ds = traj[i].dist - traj[i - 1].dist;
+            traj[i].vel = std::min(traj[i].vel, std::sqrt(traj[i - 1].vel * traj[i - 1].vel + 2 * ramseteMaxAccel * ds));
+        }
+
+        traj.back().vel = 0;
+        for (int i = static_cast<int>(traj.size()) - 2; i >= 0; i--) {
+            double ds = traj[i + 1].dist - traj[i].dist;
+            traj[i].vel = std::min(traj[i].vel, std::sqrt(traj[i + 1].vel * traj[i + 1].vel + 2 * ramseteMaxAccel * ds));
+        }
+
+        for (size_t i = 1; i < traj.size(); i++) {
+            double ds = traj[i].dist - traj[i - 1].dist;
+            double avgVel = (traj[i].vel + traj[i - 1].vel) / 2.0;
+            traj[i].time = traj[i - 1].time + (avgVel > 1e-6 ? ds / avgVel : 0);
+        }
+
+        return traj;
+    }
+
+    TrajectoryPoint sampleTrajectory(const std::vector<TrajectoryPoint>& traj, double t) {
+        if (t <= traj.front().time) return traj.front();
+        if (t >= traj.back().time) return traj.back();
+
+        auto it = std::lower_bound(traj.begin(), traj.end(), t, [](const TrajectoryPoint& p, double time) { return p.time < time; });
+        const TrajectoryPoint& b = *it;
+        const TrajectoryPoint& a = *(it - 1);
+        double span = b.time - a.time;
+        double f = span > 1e-9 ? (t - a.time) / span : 0;
+
+        double headingDiff = std::remainder(b.heading - a.heading, 2 * M_PI);
+        return {
+            a.x + f * (b.x - a.x),
+            a.y + f * (b.y - a.y),
+            a.heading + f * headingDiff,
+            a.curvature + f * (b.curvature - a.curvature),
+            a.dist + f * (b.dist - a.dist),
+            a.vel + f * (b.vel - a.vel),
+            t,
+        };
+    }
+
+    double inPerSecToMotorRpm(double inPerSec) {
+        double wheelRpm = inPerSec / (M_PI * ramseteWheelDiameter) * 60.0;
+        return wheelRpm * ramseteMotorRpm / ramseteWheelRpm;
+    }
+
+    void followRamsete(const std::vector<TrajectoryPoint>& trajectory, bool forwards, int timeout) {
+        if (trajectory.size() < 2) return;
+        chassis.waitUntilDone();
+
+        uint32_t startTime = pros::millis();
+        double direction = forwards ? 1.0 : -1.0;
+
+        while (true) {
+            double elapsed = (pros::millis() - startTime) / 1000.0;
+            if (elapsed > trajectory.back().time || pros::millis() - startTime > static_cast<uint32_t>(timeout)) break;
+
+            TrajectoryPoint target = sampleTrajectory(trajectory, elapsed);
+            lemlib::Pose pose = chassis.getPose(true, true);
+
+            double targetTheta = forwards ? target.heading : target.heading + M_PI;
+            double vd = direction * target.vel;
+            double wd = target.vel * target.curvature;
+
+            double dx = target.x - pose.x;
+            double dy = target.y - pose.y;
+            double ex = cos(pose.theta) * dx + sin(pose.theta) * dy;
+            double ey = -sin(pose.theta) * dx + cos(pose.theta) * dy;
+            double etheta = std::remainder(targetTheta - pose.theta, 2 * M_PI);
+
+            double k = 2.0 * ramseteZeta * std::sqrt(wd * wd + ramseteB * vd * vd);
+            double sinc = std::abs(etheta) < 1e-6 ? 1.0 : sin(etheta) / etheta;
+
+            double v = vd * cos(etheta) + k * ex;
+            double w = wd + k * etheta + ramseteB * vd * sinc * ey;
+
+            double left = v - w * ramseteTrackWidth / 2.0;
+            double right = v + w * ramseteTrackWidth / 2.0;
+
+            driveLeftMotors.move_velocity(std::clamp(inPerSecToMotorRpm(left), -ramseteMotorRpm, ramseteMotorRpm));
+            driveRightMotors.move_velocity(std::clamp(inPerSecToMotorRpm(right), -ramseteMotorRpm, ramseteMotorRpm));
+
+            pros::delay(ramseteLoopMs);
+        }
+
+        driveLeftMotors.brake();
+        driveRightMotors.brake();
+    }
+
+    void curveThrough(double x1, double y1, double x2, double y2, int timeout, bool forwards = true, double maxSpeed = 127) {
+        followRamsete(generateCurveTrajectory(x1, y1, x2, y2, forwards, maxSpeed), forwards, timeout);
+    }
+
+    constexpr double lineUpToleranceIn = 0.6;
+    constexpr double lineUpGoalClearanceIn = 8.0;
+    constexpr double lineUpMinLeadIn = 6.0;
+    constexpr double lineUpFieldLimitIn = 63.5;
+    constexpr double lineUpSearchStepIn = 0.25;
+    constexpr double lineUpSearchMaxIn = 144.0;
+    constexpr int lineUpMaxAttempts = 4;
+    constexpr int lineUpTurnTimeout = 700;
+    constexpr int lineUpReturnTurnTimeout = 800;
+    constexpr int lineUpMoveTimeout = 900;
+
+    bool isLinedUp(double x, double y, bool forwards) {
+        lemlib::Pose pose = chassis.getPose(true);
+        double dirX = forwards ? sin(pose.theta) : -sin(pose.theta);
+        double dirY = forwards ? cos(pose.theta) : -cos(pose.theta);
+        double dx = x - pose.x;
+        double dy = y - pose.y;
+        if (std::hypot(dx, dy) <= lineUpToleranceIn) return true;
+
+        double along = dx * dirX + dy * dirY;
+        double across = dx * dirY - dy * dirX;
+        return along > 0 && std::fabs(across) <= lineUpToleranceIn;
+    }
+
+    void shiftToLineUp(double x, double y, bool forwards);
+
+    void lineUpToPoint(double x, double y, bool forwards, bool turning) {
+        chassis.waitUntilDone();
+        if (!turning) {
+            shiftToLineUp(x, y, forwards);
+            return;
+        }
+
+        for (int attempt = 0; attempt < lineUpMaxAttempts && !isLinedUp(x, y, forwards); attempt++) {
+            chassis.turnToPoint(x, y, lineUpTurnTimeout, {.forwards = forwards});
+            chassis.waitUntilDone();
+            pros::delay(20);
+        }
+    }
+
+    void shiftToLineUp(double x, double y, bool forwards) {
+        chassis.waitUntilDone();
+        double oldHeading = chassis.getPose().theta;
+        double oldHeadingRad = oldHeading * M_PI / 180.0;
+        double dirX = forwards ? sin(oldHeadingRad) : -sin(oldHeadingRad);
+        double dirY = forwards ? cos(oldHeadingRad) : -cos(oldHeadingRad);
+
+        for (int attempt = 0; attempt < lineUpMaxAttempts && !isLinedUp(x, y, forwards); attempt++) {
+            lemlib::Pose pose = chassis.getPose(true);
+            bool found = false;
+            double bestX = 0;
+            double bestY = 0;
+            double bestDist = 1e9;
+
+            for (double s = lineUpMinLeadIn; s <= lineUpSearchMaxIn; s += lineUpSearchStepIn) {
+                double px = x - s * dirX;
+                double py = y - s * dirY;
+                if (std::fabs(px) > lineUpFieldLimitIn || std::fabs(py) > lineUpFieldLimitIn) continue;
+
+                bool nearGoal = false;
+                for (double gx : {-48.0, -24.0, 24.0, 48.0}) {
+                    for (double gy : {-48.0, -24.0, 24.0, 48.0}) {
+                        if (std::hypot(px - gx, py - gy) < lineUpGoalClearanceIn) nearGoal = true;
+                    }
+                }
+                if (nearGoal) continue;
+
+                double dist = std::hypot(px - pose.x, py - pose.y);
+                if (dist < bestDist) {
+                    found = true;
+                    bestDist = dist;
+                    bestX = px;
+                    bestY = py;
+                }
+            }
+            if (!found) break;
+
+            bool driveForwards = (bestX - pose.x) * sin(pose.theta) + (bestY - pose.y) * cos(pose.theta) >= 0;
+            chassis.moveToPoint(bestX, bestY, lineUpMoveTimeout, {.forwards = driveForwards});
+            chassis.waitUntilDone();
+            chassis.turnToHeading(oldHeading, lineUpReturnTurnTimeout);
+            chassis.waitUntilDone();
+            pros::delay(20);
+            lineUpToPoint(x, y, forwards, true);
+        }
+    }
+*/
+
+    void manualDrive(int leftPower, int rightPower) {
+        chassis.waitUntilDone();
+        driveLeftMotors.move(leftPower);
+        driveRightMotors.move(rightPower);
+    }
+
+    void firstScoringFunc(int hi) {
+        int idkbru = 300;
+        pros::Task hello(lowerLiftTask, &idkbru);
+        chassis.moveToPoint(48, 60, 1500);
+        chassis.waitUntilDone();
+        hello.join();
+        int bruh1 = 1;
+        pros::Task bruh(raiseElevatorTask, &bruh1, "hi");
+        pros::delay(20);
+        chassis.turnToHeading(-90, 800);
+        chassis.waitUntilDone();
+        resetPoseFromWalls(false, false, true);
+        bruh.join();
+        pros::delay(20);
+        chassis.moveToPoint(63, 60, 900, {.forwards = false}, false);
+        chassis.waitUntilDone();
+        endEffectorPiston.set_value(true);
+        resetPoseFromWalls(true, false, true);
+        pros::delay(20);
+        SetpointTaskParams myParams = {hi, 300};
+        pros::Task myTask(goToSetpointTask, &myParams, "Go To Setpoint");
+        chassis.moveToPoint(46, 60, 1500);
+        chassis.waitUntilDone();
+        chassis.setPose(48, 60, chassis.getPose().theta, false);
+        chassis.waitUntilDone();
+        resetPoseFromWalls(false, false, true);
+        pros::delay(20);
+        chassis.turnToHeading(0, 800);
+        chassis.waitUntilDone();
+        myTask.join();
+        chassis.moveToPoint(48, 24, 900, {.forwards = false}, false);
+        pros::delay(20);
+        resetLiftToBottom();
+        scoreAtGoal();
+    }
+
     void SAWP1() {
         chassis.cancelMotion();
         pros::delay(10);
-        imu.tare_heading();
-        verticalRotation.reset();
-        horizontalRotation.reset();
+        //imu.reset();
         pros::delay(20);
-        chassis.setPose(-9, -63, 0, false);
+        chassis.setPose(64, 9, 180, false);
+        pros::delay(20);
+/*
+        sideTogglePiston2.set_value(true);
+        pros::delay(100);
+        sideTogglePiston2.set_value(false);
+        pros::delay(300);
+        sideTogglePiston2.set_value(true);
+        pros::delay(100);
+        sideTogglePiston2.set_value(false);
+*/
+        chassis.turnToHeading(140, 500, {.maxSpeed = 127}, false);
+        chassis.waitUntilDone();
+        chassis.setPose(61,7, 140, false);
+        pros::delay(20);
         pros::delay(20);
 
-        endEffectorPiston.set_value(false);
-        intake.move(127);
-        chassis.moveToPoint(-9, -58, 300, {.forwards = true, .earlyExitRange = 1.5});
-        intakeLift1.set_value(true);
-        chassis.moveToPoint(-9, -63, 300, {.forwards = false}, false);
-        pros::delay(20);
-
-        chassis.moveToPoint(-9, -58, 300, {.forwards = true, .earlyExitRange = 1.5});
-        chassis.moveToPoint(-9, -63, 300, {.forwards = false}, false);
-        pros::delay(20);
-
-        int pinsA = 1;
-        pros::Task raiseA(raiseElevatorTask, &pinsA, "Raise A");
-        chassis.moveToPoint(-9, -48, 500, {.forwards = true, .earlyExitRange = 4});
-        intakeLift1.set_value(false);
-        chassis.turnToHeading(90, 300, {.earlyExitRange = 10});
-        chassis.moveToPoint(-24, -48, 700, {.forwards = false}, false);
-        raiseA.join();
+        chassis.moveToPoint(51, 20, 600, {.forwards = false}, false);
+        chassis.waitUntilDone();
+        chassis.setPose(48 + 6.8 * sin(chassis.getPose().theta * M_PI / 180), 24 + 6.8 * cos(chassis.getPose().theta * M_PI / 180), chassis.getPose().theta, false);
+        elevator.move(-127);
+        pros::delay(100);
+        elevator.move(0);
         scoreAtGoal();
+
+        int nn = 400;
+        pros::Task nnn(lowerLiftTask, &nn);
+        //62.37 10.12
+        chassis.moveToPoint(58.64, 14.82, 300, {.maxSpeed = 127}, false);
+        chassis.waitUntilDone();
         pros::delay(20);
 
-        RetractParams retractA = {2};
-        pros::Task transitionA(retractAndTransitionTask, &retractA, "Transition A->B");
-        chassis.swingToHeading(180, lemlib::DriveSide::RIGHT, 600, {.maxSpeed = 127}, false);
+        chassis.turnToHeading(200, 400, {.maxSpeed = 127}, false);
+        chassis.waitUntilDone();
         pros::delay(20);
 
-        intakeLift1.set_value(true);
-        chassis.moveToPoint(-24, -65, 700, {.forwards = true, .earlyExitRange = 2});
+        driveRightMotors.move(-127);
+        driveLeftMotors.move(-50);
+        pros::delay(485);
+        driveLeftMotors.move(0);
+        driveRightMotors.move(0);
         endEffectorPiston.set_value(true);
-        int delay1 = 300;
-        pros::Task drop1(intakeDropTask, &delay1, "Intake Drop 1");
-        transitionA.join();
+        pros::delay(200);
+
+        chassis.turnToPoint(52.89, 5, 600, {.maxSpeed = 127}, false);
+        chassis.waitUntilDone();
+        pros::delay(20);
+
+        SetpointTaskParams scoringParams = {2, 100};
+        pros::Task(goToSetpointTask, &scoringParams);
+        chassis.moveToPoint(52.89, 12.71, 550, {.maxSpeed = 127}, false);
+        chassis.waitUntilDone();
+        pros::delay(20);
+
+        chassis.turnToPoint(48, 24, 500, {.forwards = false, .maxSpeed = 127}, false);
+        chassis.waitUntilDone();
+        pros::delay(20);
+
+        chassis.moveToPoint(48, 20, 600, {.forwards = false}, false);
+        chassis.waitUntilDone();
+        elevator.move(-127);
+        pros::delay(100);
+        elevator.move(0);
         scoreAtGoal();
+        chassis.setPose(48 + 6.8 * sin(chassis.getPose().theta * M_PI / 180), 24 + 6.8 * cos(chassis.getPose().theta * M_PI / 180), chassis.getPose().theta, false);
         pros::delay(20);
 
-        RetractParams retractB = {2};
-        pros::Task transitionB(retractAndTransitionTask, &retractB, "Transition B->C");
-        chassis.moveToPoint(-24, -48, 700, {.forwards = false}, false);
+        pros::Task jfjf(lowerLiftTask, &nn);
+        chassis.moveToPoint(61, -5, 700, {.forwards = true}, false);
+        chassis.waitUntilDone();
+        resetPoseFromWalls(false, true, false);
+        pros::delay(20);
+        
+        chassis.turnToHeading(-20, 600, {.maxSpeed = 127}, false);
+        chassis.waitUntilDone();
         pros::delay(20);
 
-        chassis.swingToHeading(90, lemlib::DriveSide::LEFT, 600, {.maxSpeed = 127}, false);
-        pros::delay(20);
-
-        chassis.moveToPoint(0, -48, 700, {.forwards = true, .earlyExitRange = 2});
-        chassis.turnToHeading(112.5, 400, {.earlyExitRange = 4});
-        chassis.moveToPoint(24, -60, 700, {.forwards = true, .earlyExitRange = 2});
-        chassis.turnToHeading(180, 400, {.maxSpeed = 127}, false);
-        pros::delay(20);
-
-        intakeLift1.set_value(true);
-        chassis.moveToPoint(24, -65, 500, {.forwards = true, .earlyExitRange = 2});
+        driveLeftMotors.move(-127);
+        driveRightMotors.move(-85);
+        pros::delay(150);
+        driveRightMotors.move(0);
+        pros::delay(350);
+        driveLeftMotors.move(0);
         endEffectorPiston.set_value(true);
-        int delay2 = 300;
-        pros::Task drop2(intakeDropTask, &delay2, "Intake Drop 2");
-        transitionB.join();
+        resetPoseFromWalls(true, false, false);
+        pros::delay(20);
+
+        SetpointTaskParams scoringParams2 = {2, 300};
+        pros::Task hi(goToSetpointTask, &scoringParams2);
+        chassis.turnToPoint(52.89, -5, 600, {.maxSpeed = 127}, false);
+        chassis.waitUntilDone();
+        pros::delay(20);
+
+        chassis.moveToPoint(52.89, -10, 550, {.maxSpeed = 127}, false);
+        chassis.waitUntilDone();
+        pros::delay(20);
+
+        chassis.turnToPoint(48, -24, 600, {.forwards = false, .maxSpeed = 127}, false);
+        chassis.waitUntilDone();
+        pros::delay(20);
+
+        chassis.moveToPoint(48, -20, 600, {.forwards = false}, false);
+        chassis.waitUntilDone();
+        scoreAtGoal();
+        chassis.setPose(48 + 6.8 * sin(chassis.getPose().theta * M_PI / 180), -24 + 6.8 * cos(chassis.getPose().theta * M_PI / 180), chassis.getPose().theta, false);
+        pros::delay(20);
+        
+        int jojrweo = 400;
+        pros::Task jojr(lowerLiftTask, &jojrweo);
+        chassis.moveToPoint(50, 0, 600, {.maxSpeed = 127}, false);
+        chassis.waitUntilDone();
+        chassis.setPose(50, 0, chassis.getPose().theta, false);
+        pros::delay(20);
+
+        chassis.turnToPoint(24, 24, 600, {.forwards = false, .maxSpeed = 127}, false);
+        chassis.waitUntilDone();
+        pros::delay(20);
+
+        int something = 520;
+        pros::Task somethingTask(clampTask, &something);
+        chassis.moveToPoint(24, 24, 600, {.forwards = false, .maxSpeed = 127}, false);
+        chassis.waitUntilDone();
+        pros::delay(20);
+
+        SetpointTaskParams scoringParams3 = {3, 300};
+        pros::Task scoringTask67(goToSetpointTask, &scoringParams3);
+        chassis.turnToPoint(48, 24, 600, {.forwards = false, .maxSpeed = 127}, false);
+        chassis.waitUntilDone();
+        pros::delay(20);
+
+        chassis.moveToPoint(48, 29, 700, {.forwards = false, .maxSpeed = 127}, false);
+        chassis.waitUntilDone();
+        scoringTask67.join();
+        pros::delay(20);
+
+        elevator.move(-127);
+        pros::delay(100);
+        elevator.move(0);
         scoreAtGoal();
         pros::delay(20);
-        resetPoseFromWalls(true, true, false, true);
-
-        RetractParams retractC = {1};
-        pros::Task transitionC(retractAndTransitionTask, &retractC, "Transition C->D");
-        chassis.moveToPoint(24, -48, 700, {.forwards = false}, false);
+/*
+        chassis.turnToHeading(198.05, 700, {.maxSpeed = 127}, false);
+        chassis.waitUntilDone();
+        pros::delay(20);
+        
+        chassis.moveToPoint(63.4, 13.28, 550, {.forwards = false}, false);
+        chassis.waitUntilDone();
         pros::delay(20);
 
-        chassis.swingToHeading(-90, lemlib::DriveSide::RIGHT, 800, {.maxSpeed = 127}, false);
-        pros::delay(20);
-        chassis.moveToPoint(0, -12, 800, {.forwards = true, .earlyExitRange = 4});
-        chassis.moveToPoint(-48, -12, 800, {.forwards = true, .earlyExitRange = 3});
-        chassis.turnToHeading(180, 400, {.maxSpeed = 127}, false);
-        intakeLift1.set_value(true);
-        pros::delay(20);
-
-        chassis.moveToPoint(-48, -48, 800, {.forwards = true, .earlyExitRange = 2});
+        driveRightMotors.move(-127);
+        pros::delay(400);
+        driveRightMotors.move(0);
         endEffectorPiston.set_value(true);
-        int delay3 = 300;
-        pros::Task drop3(intakeDropTask, &delay3, "Intake Drop 3");
+        resetPoseFromWalls(true, false, false);
         pros::delay(20);
 
-        intakeLift1.set_value(false);
-        chassis.turnToHeading(90, 400, {.maxSpeed = 127}, false);
-        resetPoseFromWalls(false, true, true, true);
-        chassis.moveToPoint(-24, -48, 700, {.forwards = true, .earlyExitRange = 2}, false);
-        transitionC.join();
-        scoreAtGoal();
-
-        RetractParams retractD = {1};
-        pros::Task transitionD(retractAndTransitionTask, &retractD, "Transition D->F");
-        chassis.moveToPoint(-24, -48, 700, {.forwards = false}, false);
+        chassis.turnToPoint(52.89, 12.17, 700, {.maxSpeed = 127}, false);
+        chassis.waitUntilDone();
         pros::delay(20);
 
-        chassis.turnToHeading(0, 500, {.maxSpeed = 127}, false);
-        intakeLift1.set_value(true);
-        pros::delay(20);
-        chassis.moveToPoint(-24, -24, 700, {.forwards = true, .earlyExitRange = 2}, false);
-        endEffectorPiston.set_value(true);
-        int delay4 = 300;
-        pros::Task drop4(intakeDropTask, &delay4, "Intake Drop 4");
-        pros::delay(20);
-        intakeLift1.set_value(false);
-
-        chassis.turnToHeading(-45, 400, {.maxSpeed = 127}, false);
-        pros::delay(20);
-        chassis.moveToPoint(-48, 0, 800, {.forwards = true}, false);
-        pros::delay(20);
-
-        chassis.turnToHeading(180, 500, {.maxSpeed = 127}, false);
-        pros::delay(20);
-        chassis.moveToPoint(-48, 24, 700, {.forwards = false}, false);
-        transitionD.join();
-        scoreAtGoal();
-        pros::delay(20);
-        resetPoseFromWalls(true, true, true, false);
-
-        RetractParams retractF = {0};
-        pros::Task transitionF(retractAndTransitionTask, &retractF, "Transition F (final)");
-        pros::delay(20);
-
-        chassis.moveToPoint(-48, 0, 800, {.forwards = true}, false);
-        pros::delay(20);
-
-        chassis.turnToHeading(90, 500, {.maxSpeed = 127}, false);
-        pros::delay(20);
-
-        intakeLift1.set_value(true);
-        chassis.moveToPoint(-69, 0, 600, {.forwards = false}, false);
-        pros::delay(20);
-        chassis.moveToPoint(-60, 0, 400, {.forwards = true}, false);
-        chassis.moveToPoint(-69, 0, 400, {.forwards = false}, false);
-        pros::delay(20);
-        resetPoseFromWalls(true, true, true, true);
-
-        intakeLift1.set_value(false);
-        pros::delay(20);
+        */
     }
 
     void SAWP2() {
+        /*
         chassis.cancelMotion();
         pros::delay(10);
         imu.tare_heading();
         verticalRotation.reset();
         horizontalRotation.reset();
         pros::delay(20);
-        chassis.setPose(-63, -9, 90, false);
+        chassis.setPose(63.25, 0, -90, false);
         pros::delay(20);
-
-        endEffectorPiston.set_value(false);
-        intake.move(127);
-        chassis.moveToPoint(-58, -9, 300, {.forwards = true, .earlyExitRange = 1.5});
-        intakeLift1.set_value(true);
-        chassis.moveToPoint(-63, -9, 300, {.forwards = false}, false);
-        pros::delay(20);
-
-        chassis.moveToPoint(-58, -9, 300, {.forwards = true, .earlyExitRange = 1.5});
-        chassis.moveToPoint(-63, -9, 300, {.forwards = false}, false);
-        pros::delay(20);
-
-        int pinsA = 1;
-        pros::Task raiseA(raiseElevatorTask, &pinsA, "Raise A");
-        chassis.moveToPoint(-48, -9, 500, {.forwards = true, .earlyExitRange = 4});
-        intakeLift1.set_value(false);
-        chassis.turnToHeading(0, 300, {.earlyExitRange = 10});
-        chassis.moveToPoint(-48, -24, 700, {.forwards = false}, false);
-        raiseA.join();
-        scoreAtGoal();
-        pros::delay(20);
-
-        RetractParams retractA = {2};
-        pros::Task transitionA(retractAndTransitionTask, &retractA, "Transition A->B");
-        chassis.swingToHeading(-90, lemlib::DriveSide::LEFT, 600, {.maxSpeed = 127}, false);
-        pros::delay(20);
-
-        intakeLift1.set_value(true);
-        chassis.moveToPoint(-65, -24, 700, {.forwards = true, .earlyExitRange = 2});
-        endEffectorPiston.set_value(true);
-        int delay1 = 300;
-        pros::Task drop1(intakeDropTask, &delay1, "Intake Drop 1");
-        transitionA.join();
-        scoreAtGoal();
-        pros::delay(20);
-
-        RetractParams retractB = {2};
-        pros::Task transitionB(retractAndTransitionTask, &retractB, "Transition B->C");
-        chassis.moveToPoint(-48, -24, 700, {.forwards = false}, false);
-        pros::delay(20);
-
-        chassis.swingToHeading(0, lemlib::DriveSide::RIGHT, 600, {.maxSpeed = 127}, false);
-        pros::delay(20);
-
-        chassis.moveToPoint(-48, 0, 700, {.forwards = true, .earlyExitRange = 2});
-        chassis.turnToHeading(-22.5, 400, {.earlyExitRange = 4});
-        chassis.moveToPoint(-60, 24, 700, {.forwards = true, .earlyExitRange = 2});
-        chassis.turnToHeading(-90, 400, {.maxSpeed = 127}, false);
-        pros::delay(20);
-
-        intakeLift1.set_value(true);
-        chassis.moveToPoint(-65, 24, 500, {.forwards = true, .earlyExitRange = 2});
-        endEffectorPiston.set_value(true);
-        int delay2 = 300;
-        pros::Task drop2(intakeDropTask, &delay2, "Intake Drop 2");
-        transitionB.join();
-        scoreAtGoal();
-        pros::delay(20);
-        resetPoseFromWalls(true, true, true, false);
-
-        RetractParams retractC = {1};
-        pros::Task transitionC(retractAndTransitionTask, &retractC, "Transition C->D");
-        chassis.moveToPoint(-48, 24, 700, {.forwards = false}, false);
-        pros::delay(20);
-
-        chassis.swingToHeading(180, lemlib::DriveSide::LEFT, 800, {.maxSpeed = 127}, false);
-        pros::delay(20);
-        chassis.moveToPoint(-12, 0, 800, {.forwards = true, .earlyExitRange = 4});
-        chassis.moveToPoint(-12, -48, 800, {.forwards = true, .earlyExitRange = 3});
-        chassis.turnToHeading(-90, 400, {.maxSpeed = 127}, false);
-        intakeLift1.set_value(true);
-        pros::delay(20);
-
-        chassis.moveToPoint(-48, -48, 800, {.forwards = true, .earlyExitRange = 2});
-        endEffectorPiston.set_value(true);
-        int delay3 = 300;
-        pros::Task drop3(intakeDropTask, &delay3, "Intake Drop 3");
-        pros::delay(20);
-
-        intakeLift1.set_value(false);
-        chassis.turnToHeading(0, 400, {.maxSpeed = 127}, false);
-        resetPoseFromWalls(false, true, true, true);
-        chassis.moveToPoint(-48, -24, 700, {.forwards = true, .earlyExitRange = 2}, false);
-        transitionC.join();
-        scoreAtGoal();
-
-        RetractParams retractD = {1};
-        pros::Task transitionD(retractAndTransitionTask, &retractD, "Transition D->F");
-        chassis.moveToPoint(-48, -24, 700, {.forwards = false}, false);
-        pros::delay(20);
-
-        chassis.turnToHeading(90, 500, {.maxSpeed = 127}, false);
-        intakeLift1.set_value(true);
-        pros::delay(20);
-        chassis.moveToPoint(-24, -24, 700, {.forwards = true, .earlyExitRange = 2}, false);
-        endEffectorPiston.set_value(true);
-        int delay4 = 300;
-        pros::Task drop4(intakeDropTask, &delay4, "Intake Drop 4");
-        pros::delay(20);
-        intakeLift1.set_value(false);
-
-        chassis.turnToHeading(135, 400, {.maxSpeed = 127}, false);
-        pros::delay(20);
-        chassis.moveToPoint(0, -48, 800, {.forwards = true}, false);
-        pros::delay(20);
-
-        chassis.turnToHeading(-90, 500, {.maxSpeed = 127}, false);
-        pros::delay(20);
-        chassis.moveToPoint(24, -48, 700, {.forwards = false}, false);
-        transitionD.join();
-        scoreAtGoal();
-        pros::delay(20);
-        resetPoseFromWalls(true, true, false, true);
-
-        RetractParams retractF = {0};
-        pros::Task transitionF(retractAndTransitionTask, &retractF, "Transition F (final)");
-        pros::delay(20);
-
-        chassis.moveToPoint(0, -48, 800, {.forwards = true}, false);
-        pros::delay(20);
-
-        chassis.turnToHeading(90, 500, {.maxSpeed = 127}, false);
-        pros::delay(20);
-
-        intakeLift1.set_value(true);
-        chassis.moveToPoint(-69, -48, 600, {.forwards = false}, false);
-        pros::delay(20);
-        chassis.moveToPoint(-60, -48, 400, {.forwards = true}, false);
-        chassis.moveToPoint(-69, -48, 400, {.forwards = false}, false);
-        pros::delay(20);
-        resetPoseFromWalls(true, true, true, true);
-
-        intakeLift1.set_value(false);
-        pros::delay(20);
+        */
     }
 
-    void shortened1() {
+    void wall1() {
         chassis.cancelMotion();
         pros::delay(10);
         imu.tare_heading();
         verticalRotation.reset();
         horizontalRotation.reset();
         pros::delay(20);
-        chassis.setPose(-9, -63, 0, false);
+        chassis.setPose(6.75, -65, 270, false);
         pros::delay(20);
 
-        endEffectorPiston.set_value(false);
-        intake.move(127);
-        chassis.moveToPoint(-9, -58, 300, {.forwards = true, .earlyExitRange = 1.5});
-        intakeLift1.set_value(true);
-        chassis.moveToPoint(-9, -63, 300, {.forwards = false}, false);
-        pros::delay(20);
+        sideTogglePiston2.set_value(true);
+        pros::delay(100);
+        sideTogglePiston2.set_value(false);
+        pros::delay(300);
+        sideTogglePiston2.set_value(true);
+        pros::delay(100);
+        sideTogglePiston2.set_value(false);
 
-        chassis.moveToPoint(-9, -58, 300, {.forwards = true, .earlyExitRange = 1.5});
-        chassis.moveToPoint(-9, -63, 300, {.forwards = false}, false);
-        pros::delay(20);
+        chassis.turnToHeading(240, 700);
+        chassis.setPose(6.75, -60, chassis.getPose().theta, false);
 
-        int pinsA = 1;
-        pros::Task raiseA(raiseElevatorTask, &pinsA, "Raise A");
-        chassis.moveToPoint(-9, -48, 500, {.forwards = true, .earlyExitRange = 4});
-        intakeLift1.set_value(false);
-        chassis.turnToHeading(90, 300, {.earlyExitRange = 10});
-        chassis.moveToPoint(-24, -48, 700, {.forwards = false}, false);
-        raiseA.join();
+        chassis.moveToPoint(24, -48, 1000, {.forwards = false, .maxSpeed = 60});
+        chassis.waitUntilDone();
+        elevator.move(-127);
+        pros::delay(190);
+        elevator.move(0);
         scoreAtGoal();
-        pros::delay(20);
+        pros::delay(50);
 
-        RetractParams retractA = {2};
-        pros::Task transitionA(retractAndTransitionTask, &retractA, "Transition A->B");
-        chassis.swingToHeading(180, lemlib::DriveSide::RIGHT, 600, {.maxSpeed = 127}, false);
-        pros::delay(20);
+        chassis.setPose(16, -56, chassis.getPose().theta, false);
+        pros::delay(400);
+        chassis.moveToPoint(10, -48, 1000, {.forwards = true, .maxSpeed = 60});
 
-        intakeLift1.set_value(true);
-        chassis.moveToPoint(-24, -65, 700, {.forwards = true, .earlyExitRange = 2});
+        resetPoseFromWalls(false, true, false);
+
+        chassis.waitUntilDone();
+
+        int lowerDelayW1 = 0;
+        pros::Task lowerTaskW1(lowerLiftTask, &lowerDelayW1, "Lower Lift");
+        chassis.turnToHeading(323, 500);
+        chassis.waitUntilDone();
+        lowerTaskW1.join();
+
+        chassis.moveToPoint(21.5, -70, 1500, {.forwards = false, .maxSpeed = 50});
+        //chassis.turnToHeading(350, 500, {.maxSpeed = 50});
+        //chassis.moveToPoint(26, -72, 800, {.forwards = false, .maxSpeed = 50});
+        chassis.waitUntilDone();
+        manualDrive(0, -90);
+        pros::delay(350);
+        manualDrive(0, 0);
         endEffectorPiston.set_value(true);
-        int delay1 = 300;
-        pros::Task drop1(intakeDropTask, &delay1, "Intake Drop 1");
-        transitionA.join();
+        resetPoseFromWalls(true, false, false);
+
+        chassis.turnToHeading(300, 1000, {.maxSpeed = 40});
+        chassis.moveToPoint(-9, -50, 1400, {.maxSpeed = 85});
+
+        int pinsScoreW1 = 3;
+        pros::Task raiseScoreW1(raiseElevatorTask, &pinsScoreW1, "Raise 2");
+        chassis.turnToHeading(90, 900, {.maxSpeed = 75});
+        chassis.waitUntilDone();
+        resetPoseFromWalls(false, false, true);
+        pros::delay(20);
+        chassis.moveToPoint(-30, -50, 2500, {.forwards = false, .maxSpeed = 40});
+        chassis.waitUntilDone();
+        raiseScoreW1.join();
+
+        resetLiftToBottom();
         scoreAtGoal();
-        pros::delay(20);
+        pros::delay(50);
 
-        RetractParams retractB = {2};
-        pros::Task transitionB(retractAndTransitionTask, &retractB, "Transition B->C");
-        chassis.moveToPoint(-24, -48, 700, {.forwards = false}, false);
-        pros::delay(20);
-
-        chassis.swingToHeading(90, lemlib::DriveSide::LEFT, 600, {.maxSpeed = 127}, false);
-        pros::delay(20);
-
-        chassis.moveToPoint(0, -48, 700, {.forwards = true, .earlyExitRange = 2});
-        chassis.turnToHeading(112.5, 400, {.earlyExitRange = 4});
-        chassis.moveToPoint(24, -60, 700, {.forwards = true, .earlyExitRange = 2});
-        chassis.turnToHeading(180, 400, {.maxSpeed = 127}, false);
-        pros::delay(20);
-
-        intakeLift1.set_value(true);
-        chassis.moveToPoint(24, -65, 500, {.forwards = true, .earlyExitRange = 2});
-        endEffectorPiston.set_value(true);
-        int delay2 = 300;
-        pros::Task drop2(intakeDropTask, &delay2, "Intake Drop 2");
-        transitionB.join();
-        scoreAtGoal();
-
-        RetractParams retractC = {0};
-        pros::Task transitionC(retractAndTransitionTask, &retractC, "Transition C (final)");
-        chassis.moveToPoint(24, -48, 700, {.forwards = false}, false);
-        pros::delay(20);
+        chassis.moveToPoint(-10, -48, 3000, {.forwards = true, .maxSpeed = 70});
     }
 
-    void shortened2() {
+    void wall2() {
         chassis.cancelMotion();
         pros::delay(10);
         imu.tare_heading();
         verticalRotation.reset();
         horizontalRotation.reset();
         pros::delay(20);
-        chassis.setPose(-63, -9, 90, false);
+        chassis.setPose(-65, 6.75, 180, false);
         pros::delay(20);
 
-        endEffectorPiston.set_value(false);
-        intake.move(127);
-        chassis.moveToPoint(-58, -9, 300, {.forwards = true, .earlyExitRange = 1.5});
-        intakeLift1.set_value(true);
-        chassis.moveToPoint(-63, -9, 300, {.forwards = false}, false);
-        pros::delay(20);
+        sideTogglePiston.set_value(true);
+        pros::delay(100);
+        sideTogglePiston.set_value(false);
+        pros::delay(300);
+        sideTogglePiston.set_value(true);
+        pros::delay(100);
+        sideTogglePiston.set_value(false);
 
-        chassis.moveToPoint(-58, -9, 300, {.forwards = true, .earlyExitRange = 1.5});
-        chassis.moveToPoint(-63, -9, 300, {.forwards = false}, false);
-        pros::delay(20);
+        chassis.turnToHeading(-150, 700);
+        chassis.setPose(-60, 6.75, chassis.getPose().theta, false);
 
-        int pinsA = 1;
-        pros::Task raiseA(raiseElevatorTask, &pinsA, "Raise A");
-        chassis.moveToPoint(-48, -9, 500, {.forwards = true, .earlyExitRange = 4});
-        intakeLift1.set_value(false);
-        chassis.turnToHeading(0, 300, {.earlyExitRange = 10});
-        chassis.moveToPoint(-48, -24, 700, {.forwards = false}, false);
-        raiseA.join();
+        chassis.moveToPoint(-48, 24, 1000, {.forwards = false, .maxSpeed = 60});
+        chassis.waitUntilDone();
+        elevator.move(-127);
+        pros::delay(190);
+        elevator.move(0);
         scoreAtGoal();
-        pros::delay(20);
+        pros::delay(50);
+        
+        chassis.setPose(-56, 16, chassis.getPose().theta, false);
+        pros::delay(400);
+        chassis.moveToPoint(-48, 10, 1000, {.forwards = true, .maxSpeed = 60});
 
-        RetractParams retractA = {2};
-        pros::Task transitionA(retractAndTransitionTask, &retractA, "Transition A->B");
-        chassis.swingToHeading(-90, lemlib::DriveSide::LEFT, 600, {.maxSpeed = 127}, false);
-        pros::delay(20);
+        resetPoseFromWalls(false, true, false);
 
-        intakeLift1.set_value(true);
-        chassis.moveToPoint(-65, -24, 700, {.forwards = true, .earlyExitRange = 2});
+        chassis.waitUntilDone();
+
+        int lowerDelayW2 = 0;
+        pros::Task lowerTaskW2(lowerLiftTask, &lowerDelayW2, "Lower Lift");
+        chassis.turnToHeading(127, 500);
+        chassis.waitUntilDone();
+        lowerTaskW2.join();
+
+        chassis.moveToPoint(-70, 22, 1500, {.forwards = false, .maxSpeed = 50});
+        //chassis.turnToHeading(100, 500, {.maxSpeed = 50});
+        //chassis.moveToPoint(-72, 26, 800, {.forwards = false, .maxSpeed = 50});
+        chassis.waitUntilDone();
+        manualDrive(-90, 0);
+        pros::delay(350);
+        manualDrive(0, 0);
         endEffectorPiston.set_value(true);
-        int delay1 = 300;
-        pros::Task drop1(intakeDropTask, &delay1, "Intake Drop 1");
-        transitionA.join();
+        resetPoseFromWalls(true, false, false);
+        pros::delay(50);
+
+        chassis.turnToHeading(150, 1000, {.maxSpeed = 60});
+        chassis.moveToPoint(-53, 0, 1000);
+
+        int pinsScoreW2 = 3;
+        pros::Task raiseScoreW2(raiseElevatorTask, &pinsScoreW2, "Raise 2");
+        chassis.turnToHeading(0, 900, {.maxSpeed = 75});
+        chassis.waitUntilDone();
+        resetPoseFromWalls(false, false, true);
+        pros::delay(20);
+        chassis.moveToPoint(-53, -30, 2000, {.forwards = false, .maxSpeed = 50});
+        chassis.waitUntilDone();
+        raiseScoreW2.join();
+
+        resetLiftToBottom();
         scoreAtGoal();
-        pros::delay(20);
+        pros::delay(50);
 
-        RetractParams retractB = {2};
-        pros::Task transitionB(retractAndTransitionTask, &retractB, "Transition B->C");
-        chassis.moveToPoint(-48, -24, 700, {.forwards = false}, false);
-        pros::delay(20);
-
-        chassis.swingToHeading(0, lemlib::DriveSide::RIGHT, 600, {.maxSpeed = 127}, false);
-        pros::delay(20);
-
-        chassis.moveToPoint(-48, 0, 700, {.forwards = true, .earlyExitRange = 2});
-        chassis.turnToHeading(-22.5, 400, {.earlyExitRange = 4});
-        chassis.moveToPoint(-60, 24, 700, {.forwards = true, .earlyExitRange = 2});
-        chassis.turnToHeading(-90, 400, {.maxSpeed = 127}, false);
-        pros::delay(20);
-
-        intakeLift1.set_value(true);
-        chassis.moveToPoint(-65, 24, 500, {.forwards = true, .earlyExitRange = 2});
-        endEffectorPiston.set_value(true);
-        int delay2 = 300;
-        pros::Task drop2(intakeDropTask, &delay2, "Intake Drop 2");
-        transitionB.join();
-        scoreAtGoal();
-
-        RetractParams retractC = {0};
-        pros::Task transitionC(retractAndTransitionTask, &retractC, "Transition C (final)");
-        chassis.moveToPoint(-48, 24, 700, {.forwards = false}, false);
-        pros::delay(20);
+        chassis.moveToPoint(-48, -10, 3000, {.forwards = true, .maxSpeed = 70});
     }
 
     void line1() {
+        /*
         chassis.cancelMotion();
         pros::delay(10);
         imu.tare_heading();
         verticalRotation.reset();
         horizontalRotation.reset();
         pros::delay(20);
-        chassis.setPose(-9, -63, 0, false);
+        chassis.setPose(63.25, 0, -90, false);
         pros::delay(20);
-
-        endEffectorPiston.set_value(false);
-        intake.move(127);
-        chassis.moveToPoint(-9, -58, 300, {.forwards = true, .earlyExitRange = 1.5});
-        intakeLift1.set_value(true);
-        chassis.moveToPoint(-9, -63, 300, {.forwards = false}, false);
-        pros::delay(20);
-
-        chassis.moveToPoint(-9, -58, 300, {.forwards = true, .earlyExitRange = 1.5});
-        chassis.moveToPoint(-9, -63, 300, {.forwards = false}, false);
-        pros::delay(20);
-
-        int pinsA = 1;
-        pros::Task raiseA(raiseElevatorTask, &pinsA, "Raise A");
-        chassis.moveToPoint(-9, -48, 500, {.forwards = true, .earlyExitRange = 4});
-        intakeLift1.set_value(false);
-        chassis.turnToHeading(90, 300, {.earlyExitRange = 10});
-        chassis.moveToPoint(-24, -48, 700, {.forwards = false}, false);
-        raiseA.join();
-        scoreAtGoal();
-        pros::delay(20);
-
-        RetractParams retractA = {2};
-        pros::Task transitionA(retractAndTransitionTask, &retractA, "Transition A->B");
-        chassis.swingToHeading(180, lemlib::DriveSide::RIGHT, 600, {.maxSpeed = 127}, false);
-        pros::delay(20);
-
-        intakeLift1.set_value(true);
-        chassis.moveToPoint(-24, -65, 700, {.forwards = true, .earlyExitRange = 2});
-        endEffectorPiston.set_value(true);
-        int delay1 = 300;
-        pros::Task drop1(intakeDropTask, &delay1, "Intake Drop 1");
-        transitionA.join();
-        scoreAtGoal();
-        pros::delay(20);
-
-        RetractParams retractB = {1};
-        pros::Task transitionB(retractAndTransitionTask, &retractB, "Transition B->E");
-        chassis.moveToPoint(-24, -48, 700, {.forwards = false}, false);
-        pros::delay(20);
-
-        chassis.swingToHeading(-90, lemlib::DriveSide::RIGHT, 700, {.maxSpeed = 127}, false);
-        pros::delay(20);
-
-        intakeLift1.set_value(true);
-        chassis.moveToPoint(-48, -48, 700, {.forwards = true, .earlyExitRange = 2});
-        endEffectorPiston.set_value(true);
-        int delay3 = 300;
-        pros::Task drop3(intakeDropTask, &delay3, "Intake Drop 3");
-        transitionB.join();
-        scoreAtGoal();
-        pros::delay(20);
-
-        RetractParams retractE = {1};
-        pros::Task transitionE(retractAndTransitionTask, &retractE, "Transition E->D");
-        chassis.moveToPoint(-24, -48, 700, {.forwards = false}, false);
-        pros::delay(20);
-
-        chassis.swingToHeading(0, lemlib::DriveSide::RIGHT, 700, {.maxSpeed = 127}, false);
-        pros::delay(20);
-
-        intakeLift1.set_value(true);
-        chassis.moveToPoint(-24, -24, 700, {.forwards = true, .earlyExitRange = 2});
-        endEffectorPiston.set_value(true);
-        int delay4 = 300;
-        pros::Task drop4(intakeDropTask, &delay4, "Intake Drop 4");
-        transitionE.join();
-        scoreAtGoal();
-
-        RetractParams retractD = {0};
-        pros::Task transitionD(retractAndTransitionTask, &retractD, "Transition D (final)");
-        chassis.moveToPoint(-24, -48, 700, {.forwards = false}, false);
-        pros::delay(20);
+        */
     }
 
     void line2() {
+        /*
         chassis.cancelMotion();
         pros::delay(10);
         imu.tare_heading();
         verticalRotation.reset();
         horizontalRotation.reset();
         pros::delay(20);
-        chassis.setPose(-63, -9, 90, false);
+        chassis.setPose(63.25, 0, -90, false);
         pros::delay(20);
-
-        endEffectorPiston.set_value(false);
-        intake.move(127);
-        chassis.moveToPoint(-58, -9, 300, {.forwards = true, .earlyExitRange = 1.5});
-        intakeLift1.set_value(true);
-        chassis.moveToPoint(-63, -9, 300, {.forwards = false}, false);
-        pros::delay(20);
-
-        chassis.moveToPoint(-58, -9, 300, {.forwards = true, .earlyExitRange = 1.5});
-        chassis.moveToPoint(-63, -9, 300, {.forwards = false}, false);
-        pros::delay(20);
-
-        int pinsA = 1;
-        pros::Task raiseA(raiseElevatorTask, &pinsA, "Raise A");
-        chassis.moveToPoint(-48, -9, 500, {.forwards = true, .earlyExitRange = 4});
-        intakeLift1.set_value(false);
-        chassis.turnToHeading(0, 300, {.earlyExitRange = 10});
-        chassis.moveToPoint(-48, -24, 700, {.forwards = false}, false);
-        raiseA.join();
-        scoreAtGoal();
-        pros::delay(20);
-
-        RetractParams retractA = {2};
-        pros::Task transitionA(retractAndTransitionTask, &retractA, "Transition A->B");
-        chassis.swingToHeading(-90, lemlib::DriveSide::LEFT, 600, {.maxSpeed = 127}, false);
-        pros::delay(20);
-
-        intakeLift1.set_value(true);
-        chassis.moveToPoint(-65, -24, 700, {.forwards = true, .earlyExitRange = 2});
-        endEffectorPiston.set_value(true);
-        int delay1 = 300;
-        pros::Task drop1(intakeDropTask, &delay1, "Intake Drop 1");
-        transitionA.join();
-        scoreAtGoal();
-        pros::delay(20);
-
-        RetractParams retractB = {1};
-        pros::Task transitionB(retractAndTransitionTask, &retractB, "Transition B->E");
-        chassis.moveToPoint(-48, -24, 700, {.forwards = false}, false);
-        pros::delay(20);
-
-        chassis.swingToHeading(180, lemlib::DriveSide::LEFT, 700, {.maxSpeed = 127}, false);
-        pros::delay(20);
-
-        intakeLift1.set_value(true);
-        chassis.moveToPoint(-48, -48, 700, {.forwards = true, .earlyExitRange = 2});
-        endEffectorPiston.set_value(true);
-        int delay3 = 300;
-        pros::Task drop3(intakeDropTask, &delay3, "Intake Drop 3");
-        transitionB.join();
-        scoreAtGoal();
-        pros::delay(20);
-
-        RetractParams retractE = {1};
-        pros::Task transitionE(retractAndTransitionTask, &retractE, "Transition E->D");
-        chassis.moveToPoint(-48, -24, 700, {.forwards = false}, false);
-        pros::delay(20);
-
-        chassis.swingToHeading(90, lemlib::DriveSide::LEFT, 700, {.maxSpeed = 127}, false);
-        pros::delay(20);
-
-        intakeLift1.set_value(true);
-        chassis.moveToPoint(-24, -24, 700, {.forwards = true, .earlyExitRange = 2});
-        endEffectorPiston.set_value(true);
-        int delay4 = 300;
-        pros::Task drop4(intakeDropTask, &delay4, "Intake Drop 4");
-        transitionE.join();
-        scoreAtGoal();
-
-        RetractParams retractD = {0};
-        pros::Task transitionD(retractAndTransitionTask, &retractD, "Transition D (final)");
-        chassis.moveToPoint(-48, -24, 700, {.forwards = false}, false);
-        pros::delay(20);
+        */
     }
 
     void skillsPath() {
@@ -698,337 +798,188 @@ namespace Paths {
         verticalRotation.reset();
         horizontalRotation.reset();
         pros::delay(20);
-        chassis.setPose(-58, 47, 90, false);
+        chassis.setPose(63.25, 0, -90, false);
         pros::delay(20);
 
-        endEffectorPiston.set_value(false);
-        intake.move(127);
-
-        chassis.turnToHeading(-90, 400, {.earlyExitRange = 8});
-        chassis.moveToPoint(-63, 40, 600, {.forwards = true, .earlyExitRange = 1.5});
-        chassis.moveToPoint(-66, 40, 350, {.forwards = true}, false);
-        pros::delay(300);
-        chassis.moveToPoint(-56, 40, 400, {.forwards = false}, false);
+        goToSetpoint(2);
         pros::delay(20);
-        resetPoseFromWalls(true, false, true, true);
+        chassis.moveToPoint(69, 0, 700, {.forwards = false});
+        chassis.waitUntilDone();
+        pros::delay(50);
+        chassis.moveToPoint(63, 0, 700);
+        chassis.waitUntilDone();
+        pros::delay(50);
+        chassis.moveToPoint(72, 0, 700, {.forwards = false});
+        
+        chassis.setPose(65.25, 0, -90, false);
+        pros::delay(20);
 
-        int pins2 = 1;
-        pros::Task raise2(raiseElevatorTask, &pins2, "Raise 2");
-        chassis.moveToPoint(-48, 6, 700, {.forwards = true, .earlyExitRange = 4});
-        chassis.turnToHeading(180, 400, {.maxSpeed = 127}, false);
-        chassis.moveToPoint(-48, 24, 700, {.forwards = false}, false);
-        raise2.join();
+        chassis.moveToPoint(36, 0, 900);
+        chassis.waitUntilDone();
+        pros::delay(20);
+
+        chassis.turnToHeading(90, 900);
+        chassis.waitUntilDone();
+        pros::delay(20);
+
+        chassis.moveToPoint(0, 0, 900, {.forwards = false});
+        chassis.waitUntilDone();
+        pros::delay(20);
+        resetLiftToBottom();
         scoreAtGoal();
+        chassis.setPose(6.25, 0, chassis.getPose().theta, false);
+        pros::delay(50);
+
+        chassis.moveToPoint(36, 0, 900);
+        chassis.waitUntilDone();
         pros::delay(20);
 
-        RetractParams retract3 = {0};
-        pros::Task transition3(retractAndTransitionTask, &retract3, "Transition 2->3");
-        chassis.moveToPoint(-48, 10, 500, {.forwards = true, .earlyExitRange = 3});
-        chassis.turnToHeading(-90, 400, {.maxSpeed = 127}, false);
+        int sumDelay = 100;
+        pros::Task okson(lowerLiftTask, &sumDelay);
+        chassis.turnToHeading(0, 800);
+        chassis.waitUntilDone();
+        okson.join();
         pros::delay(20);
 
-        intakeLift1.set_value(true);
-        chassis.moveToPoint(-65, 24, 700, {.forwards = true, .earlyExitRange = 2});
+        chassis.moveToPoint(36, 60, 1200);
+        chassis.waitUntilDone();
+        pros::delay(20);
+
+        chassis.turnToHeading(-90, 700);
+        chassis.waitUntilDone();
+        resetPoseFromWalls(true, false, true);
+        pros::delay(20);
+
+        chassis.moveToPoint(63, 60, 900, {.forwards = false});
+        chassis.waitUntilDone();
         endEffectorPiston.set_value(true);
-        int delay3 = 300;
-        pros::Task drop3(intakeDropTask, &delay3, "Drop 3");
-        transition3.join();
+        resetPoseFromWalls(true, false, true);
+        pros::delay(20);
 
-        int pins3 = 2;
-        pros::Task raise3(raiseElevatorTask, &pins3, "Raise 3");
-        chassis.moveToPoint(-48, 6, 700, {.forwards = true, .earlyExitRange = 3});
-        chassis.turnToHeading(180, 400, {.maxSpeed = 127}, false);
-        chassis.moveToPoint(-48, 24, 700, {.forwards = false}, false);
-        raise3.join();
+        SetpointTaskParams sumParams = {2, 300};
+        pros::Task whatTask(goToSetpointTask, &sumParams);
+        chassis.moveToPoint(54, 60, 1000);
+        chassis.waitUntilDone();
+        chassis.setPose(60, 60, chassis.getPose().theta, false);
+        pros::delay(20);
+
+        chassis.turnToHeading(45, 800);
+        chassis.waitUntilDone();
+        pros::delay(20);
+
+        chassis.moveToPoint(48, 48, 1100, {.forwards = false});
+        chassis.waitUntilDone();
+        pros::delay(20);
+
+        chassis.turnToHeading(0, 700);
+        chassis.waitUntilDone();
+        whatTask.join();
+        pros::delay(20);
+
+        chassis.moveToPoint(48, 24, 900, {.forwards = false, .maxSpeed = 80});
+        chassis.waitUntilDone();
+        pros::delay(20);
+        resetLiftToBottom();
         scoreAtGoal();
+        pros::delay(50);
+        firstScoringFunc(2);
+        pros::delay(50);
+        firstScoringFunc(3);
+        pros::delay(50);
+        firstScoringFunc(4);
+        pros::delay(50);
+        firstScoringFunc(5);
+        pros::delay(50);
+
+        int idkbru2 = 300;
+        pros::Task hello2(lowerLiftTask, &idkbru2);
+        chassis.moveToPoint(48, 60, 1500);
+        chassis.waitUntilDone();
+        hello2.join();
         pros::delay(20);
-        resetPoseFromWalls(true, true, false, true);
-
-        RetractParams retract4a = {0};
-        pros::Task transition4a(retractAndTransitionTask, &retract4a, "Transition 3->4a");
-        chassis.moveToPoint(-48, 8, 600, {.forwards = true, .earlyExitRange = 4});
-        chassis.turnToHeading(-90, 350, {.maxSpeed = 127}, false);
-        chassis.moveToPoint(-57, 12, 500, {.forwards = true, .earlyExitRange = 1.5});
-        chassis.moveToPoint(-63, 12, 450, {.forwards = true}, false);
-        pros::delay(200);
-        resetPoseFromWalls(true, false, true, true);
-        chassis.moveToPoint(-56, 12, 400, {.forwards = false}, false);
-        transition4a.join();
-
-        int pins4a = 3;
-        pros::Task raise4a(raiseElevatorTask, &pins4a, "Raise 4a");
-        chassis.turnToHeading(20, 350, {.earlyExitRange = 8});
-        chassis.moveToPoint(-48, 6, 600, {.forwards = true, .earlyExitRange = 3});
-        chassis.turnToHeading(180, 400, {.maxSpeed = 127}, false);
-        chassis.moveToPoint(-48, 24, 700, {.forwards = false}, false);
-        raise4a.join();
-        scoreAtGoal();
+        chassis.turnToHeading(-90, 800);
+        chassis.waitUntilDone();
+        resetPoseFromWalls(false, false, true);
         pros::delay(20);
-
-        RetractParams retract4b = {0};
-        pros::Task transition4b(retractAndTransitionTask, &retract4b, "Transition 4a->4b");
-        chassis.moveToPoint(-48, 8, 600, {.forwards = true, .earlyExitRange = 4});
-        chassis.turnToHeading(-90, 350, {.maxSpeed = 127}, false);
-        chassis.moveToPoint(-57, 12, 500, {.forwards = true, .earlyExitRange = 1.5});
-        chassis.moveToPoint(-63, 12, 450, {.forwards = true}, false);
-        pros::delay(200);
-        resetPoseFromWalls(true, false, true, true);
-        chassis.moveToPoint(-56, 12, 400, {.forwards = false}, false);
-        transition4b.join();
-
-        int pins4b = 4;
-        pros::Task raise4b(raiseElevatorTask, &pins4b, "Raise 4b");
-        chassis.turnToHeading(20, 350, {.earlyExitRange = 8});
-        chassis.moveToPoint(-48, 6, 600, {.forwards = true, .earlyExitRange = 3});
-        chassis.turnToHeading(180, 400, {.maxSpeed = 127}, false);
-        chassis.moveToPoint(-48, 24, 700, {.forwards = false}, false);
-        raise4b.join();
-        scoreAtGoal();
-        pros::delay(20);
-
-        RetractParams retract4c = {0};
-        pros::Task transition4c(retractAndTransitionTask, &retract4c, "Transition 4b->4c");
-        chassis.moveToPoint(-48, 8, 600, {.forwards = true, .earlyExitRange = 4});
-        chassis.turnToHeading(-90, 350, {.maxSpeed = 127}, false);
-        chassis.moveToPoint(-57, 12, 500, {.forwards = true, .earlyExitRange = 1.5});
-        chassis.moveToPoint(-63, 12, 450, {.forwards = true}, false);
-        pros::delay(200);
-        resetPoseFromWalls(true, false, true, true);
-        chassis.moveToPoint(-56, 12, 400, {.forwards = false}, false);
-        transition4c.join();
-
-        int pins4c = 5;
-        pros::Task raise4c(raiseElevatorTask, &pins4c, "Raise 4c");
-        chassis.turnToHeading(20, 350, {.earlyExitRange = 8});
-        chassis.moveToPoint(-48, 6, 600, {.forwards = true, .earlyExitRange = 3});
-        chassis.turnToHeading(180, 400, {.maxSpeed = 127}, false);
-        chassis.moveToPoint(-48, 24, 700, {.forwards = false}, false);
-        raise4c.join();
-        scoreAtGoal();
-        pros::delay(20);
-
-        RetractParams retract5 = {0};
-        pros::Task transition5(retractAndTransitionTask, &retract5, "Transition 4c->5");
-        chassis.moveToPoint(-48, 8, 500, {.forwards = true, .earlyExitRange = 3});
-        chassis.turnToHeading(-27, 400, {.maxSpeed = 127}, false);
-        pros::delay(20);
-
-        intakeLift1.set_value(true);
-        chassis.moveToPoint(-48, 48, 900, {.forwards = true, .earlyExitRange = 2});
+        chassis.moveToPoint(63, 60, 900, {.forwards = false}, false);
+        chassis.waitUntilDone();
         endEffectorPiston.set_value(true);
-        int delay5 = 300;
-        pros::Task drop5(intakeDropTask, &delay5, "Drop 5");
-        transition5.join();
-
-        int pins5 = 6;
-        pros::Task raise5(raiseElevatorTask, &pins5, "Raise 5");
-        chassis.moveToPoint(-48, 6, 900, {.forwards = false, .earlyExitRange = 4});
-        chassis.turnToHeading(180, 400, {.maxSpeed = 127}, false);
-        chassis.moveToPoint(-48, 24, 700, {.forwards = false}, false);
-        raise5.join();
+        resetPoseFromWalls(true, false, true);
+        pros::delay(20);
+        SetpointTaskParams myParamsa = {6, 300};
+        pros::Task myTaska(goToSetpointTask, &myParamsa, "Go To Setpoint");
+        chassis.moveToPoint(44, 60, 1500, {.maxSpeed = 80});
+        chassis.waitUntilDone();
+        chassis.setPose(48, 60, chassis.getPose().theta, false);
+        chassis.waitUntilDone();
+        resetPoseFromWalls(false, false, true);
+        pros::delay(20);
+        chassis.turnToHeading(0, 1100, {.maxSpeed = 80});
+        chassis.waitUntilDone();
+        myTaska.join();
+        chassis.moveToPoint(48, 24, 1200, {.forwards = false, .maxSpeed = 80}, false);
+        pros::delay(20);
+        resetLiftToBottom();
         scoreAtGoal();
-        pros::delay(20);
+        pros::delay(50);
 
-        RetractParams retract6 = {0};
-        pros::Task transition6(retractAndTransitionTask, &retract6, "Transition 5->6");
-        chassis.moveToPoint(-48, 10, 500, {.forwards = true, .earlyExitRange = 3});
-        chassis.turnToHeading(70, 400, {.maxSpeed = 127}, false);
+        int idkbru = 300;
+        pros::Task hello(lowerLiftTask, &idkbru);
+        chassis.moveToPoint(48, 60, 1500);
+        chassis.waitUntilDone();
+        hello.join();
+        int bruh1 = 1;
+        pros::Task bruh(raiseElevatorTask, &bruh1, "hi");
         pros::delay(20);
-
-        intakeLift1.set_value(true);
-        chassis.moveToPoint(-24, 24, 900, {.forwards = true, .earlyExitRange = 2});
+        chassis.turnToHeading(-90, 800);
+        chassis.waitUntilDone();
+        resetPoseFromWalls(false, false, true);
+        bruh.join();
+        pros::delay(20);
+        chassis.moveToPoint(63, 60, 900, {.forwards = false}, false);
+        pros::delay(20);
         endEffectorPiston.set_value(true);
-        int delay6 = 300;
-        pros::Task drop6(intakeDropTask, &delay6, "Drop 6");
-        transition6.join();
-
-        int pins6 = 7;
-        pros::Task raise6(raiseElevatorTask, &pins6, "Raise 6");
-        chassis.moveToPoint(-40, 10, 700, {.forwards = false, .earlyExitRange = 4});
-        chassis.moveToPoint(-48, 6, 500, {.forwards = false, .earlyExitRange = 3});
-        chassis.turnToHeading(180, 400, {.maxSpeed = 127}, false);
-        chassis.moveToPoint(-48, 24, 700, {.forwards = false}, false);
-        raise6.join();
-        scoreAtGoal();
+        SetpointTaskParams myParams = {3, 300};
+        pros::Task myTask(goToSetpointTask, &myParams, "Go To Setpoint");
+        chassis.moveToPoint(48, 60, 900);
+        chassis.waitUntilDone();
+        resetPoseFromWalls(false, false, true);
+        pros::delay(20);
+        chassis.turnToHeading(38.66, 800);
+        chassis.waitUntilDone();
+        myTask.join();
+        pros::delay(20);
+        
+        chassis.moveToPoint(5, 6.25, 1500, {.forwards = false});
+        chassis.moveToPoint(0, 0, 500, {.forwards = false, .maxSpeed = 70});
+        chassis.waitUntilDone();
         pros::delay(20);
 
-        RetractParams retract7 = {0};
-        pros::Task transition7(retractAndTransitionTask, &retract7, "Transition 6->7");
-        chassis.moveToPoint(-48, 6, 600, {.forwards = true, .earlyExitRange = 3});
-        chassis.turnToHeading(135, 400, {.maxSpeed = 127}, false);
-        pros::delay(20);
-
-        intakeLift1.set_value(true);
-        chassis.moveToPoint(-24, -24, 900, {.forwards = true, .earlyExitRange = 2});
-        endEffectorPiston.set_value(true);
-        int delay7 = 300;
-        pros::Task drop7(intakeDropTask, &delay7, "Drop 7");
-        transition7.join();
-
-        int pins7 = 1;
-        pros::Task raise7(raiseElevatorTask, &pins7, "Raise 7");
-        chassis.turnToHeading(115, 400, {.earlyExitRange = 6});
-        chassis.moveToPoint(-6, -10, 700, {.forwards = false}, false);
-        raise7.join();
-        scoreAtGoal();
-        pros::delay(20);
-
-        RetractParams retract8 = {0};
-        pros::Task transition8(retractAndTransitionTask, &retract8, "Transition 7->8");
-        chassis.moveToPoint(-30, -14, 700, {.forwards = true, .earlyExitRange = 4});
-        chassis.turnToHeading(-90, 400, {.maxSpeed = 127}, false);
-        pros::delay(20);
-
-        intakeLift1.set_value(true);
-        chassis.moveToPoint(-65, -24, 1000, {.forwards = true, .earlyExitRange = 2});
-        endEffectorPiston.set_value(true);
-        int delay8 = 300;
-        pros::Task drop8(intakeDropTask, &delay8, "Drop 8");
-        transition8.join();
-
-        int pins8 = 1;
-        pros::Task raise8(raiseElevatorTask, &pins8, "Raise 8");
-        chassis.moveToPoint(-48, -6, 700, {.forwards = false, .earlyExitRange = 3});
-        chassis.turnToHeading(0, 400, {.maxSpeed = 127}, false);
-        chassis.moveToPoint(-48, -24, 700, {.forwards = false}, false);
-        raise8.join();
-        scoreAtGoal();
-        pros::delay(20);
-        resetPoseFromWalls(false, true, true, true);
-
-        RetractParams retract9a = {0};
-        pros::Task transition9a(retractAndTransitionTask, &retract9a, "Transition 8->9a");
-        chassis.moveToPoint(-48, -8, 600, {.forwards = true, .earlyExitRange = 4});
-        chassis.turnToHeading(-90, 350, {.maxSpeed = 127}, false);
-        chassis.moveToPoint(-57, -12, 500, {.forwards = true, .earlyExitRange = 1.5});
-        chassis.moveToPoint(-63, -12, 450, {.forwards = true}, false);
-        pros::delay(200);
-        resetPoseFromWalls(true, false, true, true);
-        chassis.moveToPoint(-56, -12, 400, {.forwards = false}, false);
-        transition9a.join();
-
-        int pins9a = 2;
-        pros::Task raise9a(raiseElevatorTask, &pins9a, "Raise 9a");
-        chassis.turnToHeading(-20, 350, {.earlyExitRange = 8});
-        chassis.moveToPoint(-48, -6, 600, {.forwards = true, .earlyExitRange = 3});
-        chassis.turnToHeading(0, 400, {.maxSpeed = 127}, false);
-        chassis.moveToPoint(-48, -24, 700, {.forwards = false}, false);
-        raise9a.join();
-        scoreAtGoal();
-        pros::delay(20);
-
-        RetractParams retract9b = {0};
-        pros::Task transition9b(retractAndTransitionTask, &retract9b, "Transition 9a->9b");
-        chassis.moveToPoint(-48, -8, 600, {.forwards = true, .earlyExitRange = 4});
-        chassis.turnToHeading(-90, 350, {.maxSpeed = 127}, false);
-        chassis.moveToPoint(-57, -12, 500, {.forwards = true, .earlyExitRange = 1.5});
-        chassis.moveToPoint(-63, -12, 450, {.forwards = true}, false);
-        pros::delay(200);
-        resetPoseFromWalls(true, false, true, true);
-        chassis.moveToPoint(-56, -12, 400, {.forwards = false}, false);
-        transition9b.join();
-
-        int pins9b = 3;
-        pros::Task raise9b(raiseElevatorTask, &pins9b, "Raise 9b");
-        chassis.turnToHeading(-20, 350, {.earlyExitRange = 8});
-        chassis.moveToPoint(-48, -6, 600, {.forwards = true, .earlyExitRange = 3});
-        chassis.turnToHeading(0, 400, {.maxSpeed = 127}, false);
-        chassis.moveToPoint(-48, -24, 700, {.forwards = false}, false);
-        raise9b.join();
-        scoreAtGoal();
-        pros::delay(20);
-
-        RetractParams retract9c = {0};
-        pros::Task transition9c(retractAndTransitionTask, &retract9c, "Transition 9b->9c");
-        chassis.moveToPoint(-48, -8, 600, {.forwards = true, .earlyExitRange = 4});
-        chassis.turnToHeading(-90, 350, {.maxSpeed = 127}, false);
-        chassis.moveToPoint(-57, -12, 500, {.forwards = true, .earlyExitRange = 1.5});
-        chassis.moveToPoint(-63, -12, 450, {.forwards = true}, false);
-        pros::delay(200);
-        resetPoseFromWalls(true, false, true, true);
-        chassis.moveToPoint(-56, -12, 400, {.forwards = false}, false);
-        transition9c.join();
-
-        int pins9c = 4;
-        pros::Task raise9c(raiseElevatorTask, &pins9c, "Raise 9c");
-        chassis.turnToHeading(-20, 350, {.earlyExitRange = 8});
-        chassis.moveToPoint(-48, -6, 600, {.forwards = true, .earlyExitRange = 3});
-        chassis.turnToHeading(0, 400, {.maxSpeed = 127}, false);
-        chassis.moveToPoint(-48, -24, 700, {.forwards = false}, false);
-        raise9c.join();
-        scoreAtGoal();
-        pros::delay(20);
-
-        RetractParams retract9d = {0};
-        pros::Task transition9d(retractAndTransitionTask, &retract9d, "Transition 9c->9d");
-        chassis.moveToPoint(-48, -8, 600, {.forwards = true, .earlyExitRange = 4});
-        chassis.turnToHeading(-90, 350, {.maxSpeed = 127}, false);
-        chassis.moveToPoint(-57, -12, 500, {.forwards = true, .earlyExitRange = 1.5});
-        chassis.moveToPoint(-63, -12, 450, {.forwards = true}, false);
-        pros::delay(200);
-        resetPoseFromWalls(true, false, true, true);
-        chassis.moveToPoint(-56, -12, 400, {.forwards = false}, false);
-        transition9d.join();
-
-        int pins9d = 5;
-        pros::Task raise9d(raiseElevatorTask, &pins9d, "Raise 9d");
-        chassis.turnToHeading(-20, 350, {.earlyExitRange = 8});
-        chassis.moveToPoint(-48, -6, 600, {.forwards = true, .earlyExitRange = 3});
-        chassis.turnToHeading(0, 400, {.maxSpeed = 127}, false);
-        chassis.moveToPoint(-48, -24, 700, {.forwards = false}, false);
-        raise9d.join();
-        scoreAtGoal();
-        pros::delay(20);
-
-        RetractParams retract10 = {0};
-        pros::Task transition10(retractAndTransitionTask, &retract10, "Transition 9d->10");
-        chassis.moveToPoint(-48, -10, 500, {.forwards = true, .earlyExitRange = 3});
-        chassis.turnToHeading(-135, 400, {.maxSpeed = 127}, false);
-        pros::delay(20);
-
-        intakeLift1.set_value(true);
-        chassis.moveToPoint(-48, -48, 900, {.forwards = true, .earlyExitRange = 2});
-        endEffectorPiston.set_value(true);
-        int delay10 = 300;
-        pros::Task drop10(intakeDropTask, &delay10, "Drop 10");
-        transition10.join();
-
-        int pins10 = 6;
-        pros::Task raise10(raiseElevatorTask, &pins10, "Raise 10");
-        chassis.moveToPoint(-48, -6, 900, {.forwards = false, .earlyExitRange = 4});
-        chassis.turnToHeading(0, 400, {.maxSpeed = 127}, false);
-        chassis.moveToPoint(-48, -24, 700, {.forwards = false}, false);
-        raise10.join();
-        scoreAtGoal();
-        pros::delay(20);
-        resetPoseFromWalls(false, true, true, true);
-
-        RetractParams retractPark = {0};
-        pros::Task transitionPark(retractAndTransitionTask, &retractPark, "Transition 10->park");
-        chassis.moveToPoint(-48, -6, 700, {.forwards = true, .earlyExitRange = 4});
-        chassis.turnToHeading(-90, 400, {.maxSpeed = 127}, false);
-        chassis.moveToPoint(-63, 0, 900, {.forwards = true}, false);
-        resetPoseFromWalls(true, true, true, true);
-        transitionPark.join();
-        intake.move(0);
-        pros::delay(20);
+        chassis.moveToPoint(5, 6.25, 500);
     }
 
     void runAutonomous() {
-        if(currentStartingPos == 0) {
-            shortened1();
-        } else if(currentStartingPos == 1) {
-            shortened2();
-        } else if(currentStartingPos == 2) {
-            SAWP1();
-        } else if(currentStartingPos == 3) {
-            SAWP2();
-        } else if(currentStartingPos == 4) {
+        autonRunning = true;
+        //mclEnabled = true;
+        fullLiftPowerAuton = currentStartingPos == 0 || currentStartingPos == 1 || currentStartingPos == 6;
+        if (currentStartingPos == 0) {
             line1();
-        } else if(currentStartingPos == 5) {
+        }
+        else if (currentStartingPos == 1) {
             line2();
-        } else if(currentStartingPos == 6) {
+        } else if (currentStartingPos == 2) {
+            wall1();
+        } else if (currentStartingPos == 3) {
+            wall2();
+        } else if (currentStartingPos == 4) {
+            SAWP1();
+        } else if (currentStartingPos == 5) {
+            SAWP2();
+        } else if (currentStartingPos == 6) {
             skillsPath();
         }
+        autonRunning = false;
+        //mclEnabled = false;
+        fullLiftPowerAuton = false;
     }
 }
